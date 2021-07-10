@@ -1,6 +1,7 @@
 from functools import partial
 import pretrained
 from smac.env import MultiAgentEnv, StarCraft2Env
+import lbforaging
 import sys
 import os
 import gym
