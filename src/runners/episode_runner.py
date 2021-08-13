@@ -68,6 +68,8 @@ class EpisodeRunner:
 
             reward, terminated, env_info = self.env.step(actions[0])
             episode_return += reward
+            # take the env_info and sum them up
+            
 
             post_transition_data = {
                 "actions": actions,
@@ -121,3 +123,9 @@ class EpisodeRunner:
             if k != "n_episodes":
                 self.logger.log_stat(prefix + k + "_mean" , v/stats["n_episodes"], self.t_env)
         stats.clear()
+
+    #info logger written by me:
+    def _log_info(self,info):
+        #this function will log each agent's mean reward value for each logging period.
+        for k, value in enumerate(info['agent_rewards']):
+            self.logger.log_stat('agent_'+ k ,value, self.t_env)
