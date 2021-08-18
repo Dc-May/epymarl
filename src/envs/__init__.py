@@ -110,8 +110,7 @@ class _GymmaWrapper(MultiAgentEnv):
             for o in self._obs
         ]
         
-        # Cannot just send a single list, its a dictionary 
-        return float(sum(reward)), all(done), {} #{'agent_rewards': reward}
+        return float(sum(reward)), all(done), {'agent_rewards': reward}
 
     def get_obs(self):
         """ Returns all agent observations in a list """

@@ -23,6 +23,9 @@ class EpisodeRunner:
         self.train_stats = {}
         self.test_stats = {}
 
+        # add the agent returns here: 
+        self.agent_returns = []
+
         # Log the first run
         self.log_train_stats_t = -1000000
 
@@ -47,7 +50,9 @@ class EpisodeRunner:
 
     def run(self, test_mode=False):
         self.reset()
-
+        # this clears the agent returns list every episode. 
+        # TODO: Works
+        current_episode_agent_returns = [0]*self.args.n_agents
         terminated = False
         episode_return = 0
         self.mac.init_hidden(batch_size=self.batch_size)
@@ -68,9 +73,9 @@ class EpisodeRunner:
 
             reward, terminated, env_info = self.env.step(actions[0])
             episode_return += reward
-            # take the env_info and sum them up
-            
-
+            # TODO: works 
+            for i, value in enumerate(env_info['agent_rewards']): 
+                    current_episode_agent_returns[i] += value
             post_transition_data = {
                 "actions": actions,
                 "reward": [(reward,)],
@@ -95,6 +100,13 @@ class EpisodeRunner:
         cur_stats = self.test_stats if test_mode else self.train_stats
         cur_returns = self.test_returns if test_mode else self.train_returns
         log_prefix = "test_" if test_mode else ""
+
+        # this is where I can append current_episode_agent_returns
+        # TODO: works
+        self.agent_returns.append(current_episode_agent_returns)
+        env_info.pop('agent_rewards')
+
+
         cur_stats.update({k: cur_stats.get(k, 0) + env_info.get(k, 0) for k in set(cur_stats) | set(env_info)})
         cur_stats["n_episodes"] = 1 + cur_stats.get("n_episodes", 0)
         cur_stats["ep_length"] = self.t + cur_stats.get("ep_length", 0)
@@ -103,11 +115,16 @@ class EpisodeRunner:
             self.t_env += self.t
 
         cur_returns.append(episode_return)
+       
 
         if test_mode and (len(self.test_returns) == self.args.test_nepisode):
             self._log(cur_returns, cur_stats, log_prefix)
+            self._log_info(log_prefix)
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
             self._log(cur_returns, cur_stats, log_prefix)
+            # time to log 
+            self._log_info(log_prefix)
+
             if hasattr(self.mac.action_selector, "epsilon"):
                 self.logger.log_stat("epsilon", self.mac.action_selector.epsilon, self.t_env)
             self.log_train_stats_t = self.t_env
@@ -125,7 +142,19 @@ class EpisodeRunner:
         stats.clear()
 
     #info logger written by me:
-    def _log_info(self,info):
+    def _log_info(self,prefix):
         #this function will log each agent's mean reward value for each logging period.
-        for k, value in enumerate(info['agent_rewards']):
-            self.logger.log_stat('agent_'+ k ,value, self.t_env)
+        # TODO: this needs to be automated for any number of agents 
+    
+        n_agents = self.args.n_agents
+    
+        array = np.array(self.agent_returns)
+     
+        self.logger.log_stat(prefix + "agent_0_mean_returns",np.mean(array[:,0]), self.t_env)
+        self.logger.log_stat(prefix + 'agent_0_return_std', np.std(array[:,0]), self.t_env)
+               
+        self.logger.log_stat(prefix + "agent_1_mean_returns",np.mean(array[:,1]), self.t_env)
+        self.logger.log_stat(prefix + 'agent_1_return_std', np.std(array[:,1]), self.t_env)
+
+        # TODO: works
+        self.agent_returns = [] 
