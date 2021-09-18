@@ -4,6 +4,7 @@ from components.episode_buffer import EpisodeBatch
 from multiprocessing import Pipe, Process
 import numpy as np
 import torch as th
+import os
 
 
 # Based (very) heavily on SubprocVecEnv from OpenAI Baselines
@@ -26,9 +27,11 @@ class ParallelRunner:
                             for env_arg, worker_conn in zip(env_args, self.worker_conns)]
 
         for p in self.ps:
+            # TODO: After this, the multiprocess starts and its impossible to use the debugger.
             p.daemon = True
             p.start()
-
+        
+        # these three lines get the episode limit from the environment 
         self.parent_conns[0].send(("get_env_info", None))
         self.env_info = self.parent_conns[0].recv()
         self.episode_limit = self.env_info["episode_limit"]
@@ -36,12 +39,13 @@ class ParallelRunner:
         self.t = 0
 
         self.t_env = 0
-
+        # this sets up the arrays and dictionaries necessary for saveing the metrics 
         self.train_returns = []
         self.test_returns = []
         self.train_stats = {}
         self.test_stats = {}
-
+        #TODO: this is what i have added sept 16
+        self.agent_returns = []
         self.log_train_stats_t = -100000
 
     def setup(self, scheme, groups, preprocess, mac):
@@ -64,7 +68,8 @@ class ParallelRunner:
 
     def reset(self):
         self.batch = self.new_batch()
-
+        self.agent_returns = []
+        
         # Reset the envs
         for parent_conn in self.parent_conns:
             parent_conn.send(("reset", None))
@@ -81,17 +86,22 @@ class ParallelRunner:
             pre_transition_data["avail_actions"].append(data["avail_actions"])
             pre_transition_data["obs"].append(data["obs"])
 
+        # send the pre_transition data to the batch for the 0th timestep
         self.batch.update(pre_transition_data, ts=0)
 
         self.t = 0
         self.env_steps_this_run = 0
 
     def run(self, test_mode=False):
+        
         self.reset()
 
         all_terminated = False
         episode_returns = [0 for _ in range(self.batch_size)]
         episode_lengths = [0 for _ in range(self.batch_size)]
+        agent_returns = [0 for _ in range(self.batch_size)]
+        curr_agent_returns=[]
+        
         self.mac.init_hidden(batch_size=self.batch_size)
         terminated = [False for _ in range(self.batch_size)]
         envs_not_terminated = [b_idx for b_idx, termed in enumerate(terminated) if not termed]
@@ -103,7 +113,7 @@ class ParallelRunner:
             # Receive the actions for each agent at this timestep in a batch for each un-terminated env
             actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, bs=envs_not_terminated, test_mode=test_mode)
             cpu_actions = actions.to("cpu").numpy()
-
+        
             # Update the actions taken
             actions_chosen = {
                 "actions": actions.unsqueeze(1)
@@ -115,12 +125,13 @@ class ParallelRunner:
             for idx, parent_conn in enumerate(self.parent_conns):
                 if idx in envs_not_terminated: # We produced actions for this env
                     if not terminated[idx]: # Only send the actions to the env if it hasn't terminated
-                        parent_conn.send(("step", cpu_actions[action_idx]))
+                        parent_conn.send(("step", cpu_actions[action_idx])) #SEND THE STEP command to all the parallel envs
                     action_idx += 1 # actions is not a list over every env
 
             # Update envs_not_terminated
             envs_not_terminated = [b_idx for b_idx, termed in enumerate(terminated) if not termed]
             all_terminated = all(terminated)
+            # if envs are all done, break the loop 
             if all_terminated:
                 break
 
@@ -139,18 +150,23 @@ class ParallelRunner:
             # Receive data back for each unterminated env
             for idx, parent_conn in enumerate(self.parent_conns):
                 if not terminated[idx]:
-                    data = parent_conn.recv()
+                    data = parent_conn.recv() #GETS THE DATA DICTIONARY FROM EACH PARALLEL ENV 
                     # Remaining data for this current timestep
-                    post_transition_data["reward"].append((data["reward"],))
-
-                    episode_returns[idx] += data["reward"]
+                    post_transition_data["reward"].append((data["reward"],)) #What is this , there for?
+                    
+                    
+                    agent_returns[idx] = data["info"]["agent_rewards"]
+                    # print('agent returns inside the not terminated loop', agent_returns)
+                    episode_returns[idx] += data["reward"] # Add the current step return to the episode returns for each process 
                     episode_lengths[idx] += 1
                     if not test_mode:
                         self.env_steps_this_run += 1
 
                     env_terminated = False
+                    # TODO: this pop works sept 16
+                    data['info'].pop('agent_rewards')
                     if data["terminated"]:
-                        final_env_infos.append(data["info"])
+                        final_env_infos.append(data["info"]) #FIXME: this is where the hack gets passed back into their code, breaking it later on 
                     if data["terminated"] and not data["info"].get("episode_limit", False):
                         env_terminated = True
                     terminated[idx] = data["terminated"]
@@ -160,7 +176,9 @@ class ParallelRunner:
                     pre_transition_data["state"].append(data["state"])
                     pre_transition_data["avail_actions"].append(data["avail_actions"])
                     pre_transition_data["obs"].append(data["obs"])
-
+            
+            self.agent_returns.append(tuple(agent_returns))
+            # print('after append',self.agent_returns)
             # Add post_transiton data into the batch
             self.batch.update(post_transition_data, bs=envs_not_terminated, ts=self.t, mark_filled=False)
 
@@ -184,19 +202,25 @@ class ParallelRunner:
 
         cur_stats = self.test_stats if test_mode else self.train_stats
         cur_returns = self.test_returns if test_mode else self.train_returns
+        
         log_prefix = "test_" if test_mode else ""
         infos = [cur_stats] + final_env_infos
+        # FIXME: this is what breaks sept 14 
         cur_stats.update({k: sum(d.get(k, 0) for d in infos) for k in set.union(*[set(d) for d in infos])})
         cur_stats["n_episodes"] = self.batch_size + cur_stats.get("n_episodes", 0)
         cur_stats["ep_length"] = sum(episode_lengths) + cur_stats.get("ep_length", 0)
 
         cur_returns.extend(episode_returns)
-
+        curr_agent_returns.extend(self.agent_returns)
         n_test_runs = max(1, self.args.test_nepisode // self.batch_size) * self.batch_size
         if test_mode and (len(self.test_returns) == n_test_runs):
             self._log(cur_returns, cur_stats, log_prefix)
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
             self._log(cur_returns, cur_stats, log_prefix)
+            
+            log_array = np.array(curr_agent_returns)
+            # print('logging now', type(log_array[0]))
+            self._log_agent_rewards(log_array, 'test')
             if hasattr(self.mac.action_selector, "epsilon"):
                 self.logger.log_stat("epsilon", self.mac.action_selector.epsilon, self.t_env)
             self.log_train_stats_t = self.t_env
@@ -212,6 +236,29 @@ class ParallelRunner:
             if k != "n_episodes":
                 self.logger.log_stat(prefix + k + "_mean" , v/stats["n_episodes"], self.t_env)
         stats.clear()
+    
+    def _log_agent_rewards(self, agent_returns, prefix):
+        '''
+
+        '''
+        
+        n_agents = self.args.n_agents
+        final_array = [list() for n in range(n_agents)]
+        for _, batch in enumerate(agent_returns):
+            for _, step in enumerate(batch):
+                for agent in range(n_agents):
+                    # print('step',agent ,step[agent])
+                    final_array[agent].append(step[agent])
+
+        print(final_array) 
+        np_final_array= np.array(final_array)
+        for n in range(n_agents):
+            mean = np.mean(np_final_array[n])
+            print('n', mean)
+        # FIXME: this records but i have no idea why what it records does not line up with what is logged. 
+        # for n in n_agents: 
+        #     # self.logger.log_stat(prefix + 'agent_' + str(n) + '_mean_returns', , self.t_env)
+        #     self.logger.log_stat(prefix + 'agent_' + str(n) + '_return_std', np.std(agent_returns[:,n]), self.t_env)
 
 
 def env_worker(remote, env_fn):
@@ -222,7 +269,10 @@ def env_worker(remote, env_fn):
         if cmd == "step":
             actions = data
             # Take a step in the environment
+            # TODO: This is where my env change interacts with the code
             reward, terminated, env_info = env.step(actions)
+            process_id = os.getpid()
+            # print(process_id,'woo' ,env_info)
             # Return the observations, avail_actions and state to make the next action
             state = env.get_state()
             avail_actions = env.get_avail_actions()
@@ -235,8 +285,10 @@ def env_worker(remote, env_fn):
                 # Rest of the data for the current timestep
                 "reward": reward,
                 "terminated": terminated,
-                "info": env_info
+                "info": env_info #TODO: check if this gets passed properly 
             })
+            
+            # env_info.pop('agent_rewards')
         elif cmd == "reset":
             env.reset()
             remote.send({

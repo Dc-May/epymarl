@@ -109,8 +109,9 @@ class _GymmaWrapper(MultiAgentEnv):
             )
             for o in self._obs
         ]
-        
+        #TODO: THIS is where the change is :)
         return float(sum(reward)), all(done), {'agent_rewards': reward}
+        # return float(sum(reward)), all(done), {}
 
     def get_obs(self):
         """ Returns all agent observations in a list """
