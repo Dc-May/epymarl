@@ -160,7 +160,7 @@ class EpisodeRunner:
         # self.logger.log_stat(prefix + "agent_1_mean_returns",np.mean(array[:,1]), self.t_env)
         # self.logger.log_stat(prefix + 'agent_1_return_std', np.std(array[:,1]), self.t_env)
         # TODO: sept 17, this needs to be tested
-        for n in n_agents:
+        for n in range(n_agents):
             self.logger.log_stat(prefix + 'agent_' + str(n) + '_mean_returns', np.mean(array[:,n]), self.t_env)
             self.logger.log_stat(prefix + 'agent_' + str(n) + '_return_std', np.std(array[:,n]), self.t_env)
 

@@ -27,7 +27,6 @@ class ParallelRunner:
                             for env_arg, worker_conn in zip(env_args, self.worker_conns)]
 
         for p in self.ps:
-            # TODO: After this, the multiprocess starts and its impossible to use the debugger.
             p.daemon = True
             p.start()
         
@@ -46,6 +45,8 @@ class ParallelRunner:
         self.test_stats = {}
         #TODO: this is what i have added sept 16
         self.agent_returns = []
+        self.agent_returns_array = []
+
         self.log_train_stats_t = -100000
 
     def setup(self, scheme, groups, preprocess, mac):
@@ -100,7 +101,8 @@ class ParallelRunner:
         episode_returns = [0 for _ in range(self.batch_size)]
         episode_lengths = [0 for _ in range(self.batch_size)]
         agent_returns = [0 for _ in range(self.batch_size)]
-        curr_agent_returns=[]
+        curr_agent_returns=[[0,0] for _ in range(self.batch_size)] #TODO: Sept 20; I think that this is what is causing the extension is not working properly. 
+        
         
         self.mac.init_hidden(batch_size=self.batch_size)
         terminated = [False for _ in range(self.batch_size)]
@@ -152,21 +154,20 @@ class ParallelRunner:
                 if not terminated[idx]:
                     data = parent_conn.recv() #GETS THE DATA DICTIONARY FROM EACH PARALLEL ENV 
                     # Remaining data for this current timestep
-                    post_transition_data["reward"].append((data["reward"],)) #What is this , there for?
-                    
+                    post_transition_data["reward"].append((data["reward"],)) 
                     
                     agent_returns[idx] = data["info"]["agent_rewards"]
-                    # print('agent returns inside the not terminated loop', agent_returns)
+                  
                     episode_returns[idx] += data["reward"] # Add the current step return to the episode returns for each process 
                     episode_lengths[idx] += 1
                     if not test_mode:
                         self.env_steps_this_run += 1
 
                     env_terminated = False
-                    # TODO: this pop works sept 16
+            
                     data['info'].pop('agent_rewards')
                     if data["terminated"]:
-                        final_env_infos.append(data["info"]) #FIXME: this is where the hack gets passed back into their code, breaking it later on 
+                        final_env_infos.append(data["info"])
                     if data["terminated"] and not data["info"].get("episode_limit", False):
                         env_terminated = True
                     terminated[idx] = data["terminated"]
@@ -177,7 +178,9 @@ class ParallelRunner:
                     pre_transition_data["avail_actions"].append(data["avail_actions"])
                     pre_transition_data["obs"].append(data["obs"])
             
+           
             self.agent_returns.append(tuple(agent_returns))
+
             # print('after append',self.agent_returns)
             # Add post_transiton data into the batch
             self.batch.update(post_transition_data, bs=envs_not_terminated, ts=self.t, mark_filled=False)
@@ -187,7 +190,9 @@ class ParallelRunner:
 
             # Add the pre-transition data
             self.batch.update(pre_transition_data, bs=envs_not_terminated, ts=self.t, mark_filled=True)
-
+        
+        
+        
         if not test_mode:
             self.t_env += self.env_steps_this_run
 
@@ -205,22 +210,43 @@ class ParallelRunner:
         
         log_prefix = "test_" if test_mode else ""
         infos = [cur_stats] + final_env_infos
-        # FIXME: this is what breaks sept 14 
         cur_stats.update({k: sum(d.get(k, 0) for d in infos) for k in set.union(*[set(d) for d in infos])})
         cur_stats["n_episodes"] = self.batch_size + cur_stats.get("n_episodes", 0)
         cur_stats["ep_length"] = sum(episode_lengths) + cur_stats.get("ep_length", 0)
 
         cur_returns.extend(episode_returns)
-        curr_agent_returns.extend(self.agent_returns)
+        # print('Current returns array',cur_returns)
+        
+        #FIXME: Sept 20, this extension does nothing 
+        # TODO: sept 20, collapse the 50 samples into one return sum for each world here 
+        # env_dummy = [0 for agent in range(self.args.n_agents)]
+
+        for _, run in enumerate(self.agent_returns):
+            env_dummy = [0 for agent in range(self.args.n_agents)]
+            for env_index, env_result in enumerate(run):
+                # print('eun',env_index)
+                # This is where we add each run result up for each agent so that we are left with one sum per env
+                # env_result = [agent0, agent1]
+                # need a dummy list here
+                # print('run, env_result', run, env_result)
+                for agent in range(self.args.n_agents):
+                    curr_agent_returns[env_index][agent] += env_result[agent]
+
+                
+            # this is where you would send the env_dummy to the curr_agent_returns 
+            
+        # FIXME: Sept 23, this does not extend the array         
+        # agent_returns_array.append(curr_agent_returns)
+        self.agent_returns_array.extend(curr_agent_returns)
+        # print('Current agent returns array', len(self.agent_returns_array))
+        
         n_test_runs = max(1, self.args.test_nepisode // self.batch_size) * self.batch_size
         if test_mode and (len(self.test_returns) == n_test_runs):
             self._log(cur_returns, cur_stats, log_prefix)
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
             self._log(cur_returns, cur_stats, log_prefix)
             
-            log_array = np.array(curr_agent_returns)
-            # print('logging now', type(log_array[0]))
-            self._log_agent_rewards(log_array, 'test')
+            self._log_agent_rewards(self.agent_returns_array, 'test')
             if hasattr(self.mac.action_selector, "epsilon"):
                 self.logger.log_stat("epsilon", self.mac.action_selector.epsilon, self.t_env)
             self.log_train_stats_t = self.t_env
@@ -228,6 +254,7 @@ class ParallelRunner:
         return self.batch
 
     def _log(self, returns, stats, prefix):
+        # print('returns that they are logging logging', len(returns))
         self.logger.log_stat(prefix + "return_mean", np.mean(returns), self.t_env)
         self.logger.log_stat(prefix + "return_std", np.std(returns), self.t_env)
         returns.clear()
@@ -241,24 +268,31 @@ class ParallelRunner:
         '''
 
         '''
-        
+        # print('returns that i am logging' , len(agent_returns))
+        np_agent_returns = np.array(agent_returns)
+       
+        test = np.mean(np_agent_returns, axis=0)
+        # print(test)
         n_agents = self.args.n_agents
-        final_array = [list() for n in range(n_agents)]
-        for _, batch in enumerate(agent_returns):
-            for _, step in enumerate(batch):
-                for agent in range(n_agents):
-                    # print('step',agent ,step[agent])
-                    final_array[agent].append(step[agent])
+        # final_array = [list() for n in range(n_agents)]
+        # for _, batch in enumerate(agent_returns):
+        #     for _, step in enumerate(batch):
+        #         for agent in range(n_agents):
+        #             # print('step',agent ,step[agent])
+        #             final_array[agent].append(step[agent])
 
-        print(final_array) 
-        np_final_array= np.array(final_array)
-        for n in range(n_agents):
-            mean = np.mean(np_final_array[n])
-            print('n', mean)
-        # FIXME: this records but i have no idea why what it records does not line up with what is logged. 
-        # for n in n_agents: 
-        #     # self.logger.log_stat(prefix + 'agent_' + str(n) + '_mean_returns', , self.t_env)
-        #     self.logger.log_stat(prefix + 'agent_' + str(n) + '_return_std', np.std(agent_returns[:,n]), self.t_env)
+        # print(final_array) 
+        # np_final_array= np.array(final_array)
+        # for n in range(n_agents):
+        #     mean = np.mean(np_final_array[n])
+            # print('n', mean)
+        # FIXME:Sept 17 this records but i have no idea why what it records does not line up with what is logged. 
+        for n in range(n_agents): 
+            self.logger.log_stat(prefix + 'agent_' + str(n) + '_mean_returns',np.mean(np_agent_returns[:,n]) , self.t_env)
+            self.logger.log_stat(prefix + 'agent_' + str(n) + '_return_std', np.std(np_agent_returns[:,n]), self.t_env)
+        # TODO:Sept 20 agent_returns cannot be cleared like this. 
+        agent_returns.clear()
+        
 
 
 def env_worker(remote, env_fn):
@@ -285,7 +319,7 @@ def env_worker(remote, env_fn):
                 # Rest of the data for the current timestep
                 "reward": reward,
                 "terminated": terminated,
-                "info": env_info #TODO: check if this gets passed properly 
+                "info": env_info  
             })
             
             # env_info.pop('agent_rewards')
