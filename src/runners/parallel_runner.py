@@ -229,8 +229,11 @@ class ParallelRunner:
                 # env_result = [agent0, agent1]
                 # need a dummy list here
                 # print('run, env_result', run, env_result)
+                # print('curr_agent_returns', curr_agent_returns)
                 for agent in range(self.args.n_agents):
+                    # print('run, env_result, agent', run,env_result,agent)
                     curr_agent_returns[env_index][agent] += env_result[agent]
+
 
                 
             # this is where you would send the env_dummy to the curr_agent_returns 
@@ -246,7 +249,7 @@ class ParallelRunner:
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
             self._log(cur_returns, cur_stats, log_prefix)
             
-            self._log_agent_rewards(self.agent_returns_array, 'test')
+            self._log_agent_rewards(self.agent_returns_array, log_prefix)
             if hasattr(self.mac.action_selector, "epsilon"):
                 self.logger.log_stat("epsilon", self.mac.action_selector.epsilon, self.t_env)
             self.log_train_stats_t = self.t_env
