@@ -11,8 +11,13 @@ import sys
 import torch as th
 from utils.logging import get_logger
 import yaml
-
+import pymongo 
+import ssl
 from run import run
+import configparser
+
+db_config = configparser.ConfigParser()
+db_config.read(os.getcwd()+"\\src\\db_config.ini")
 
 SETTINGS['CAPTURE_MODE'] = "no" # set to "no" if you want to see stdout/stderr in console
 logger = get_logger()
@@ -72,6 +77,7 @@ def config_copy(config):
 
 
 if __name__ == '__main__':
+   
     params = deepcopy(sys.argv)
     th.set_num_threads(1)
 
@@ -107,8 +113,18 @@ if __name__ == '__main__':
     # Save to disk by default for sacred
     logger.info("Saving to FileStorageObserver in results/sacred.")
     file_obs_path = os.path.join(results_path, f"sacred/{config_dict['name']}/{map_name}")
-    print(params)
-    # ex.observers.append(MongoObserver(db_name="marlbench")) #url='172.31.5.187:27017'))
+    
+
+    client = pymongo.MongoClient(db_config['mongodb']['db_url'],
+                                    ssl = True, 
+                                    ssl_cert_reqs= ssl.CERT_NONE
+    )
+
+    # client = pymongo.MongoClient("mongodb+srv://peteradmin:peteradmin@testcluster1.zerxv.mongodb.net/testdatebase?retryWrites=true&w=majority",
+    # ssl=True, 
+    # ssl_cert_reqs=ssl.CERT_NONE
+    # ) 
+    ex.observers.append(MongoObserver(db_name="testsacred", client=client, collection_prefix='testmolly')) #url='172.31.5.187:27017'))
     ex.observers.append(FileStorageObserver.create("./results/sacred"))
     # ex.observers.append(MongoObserver())
     

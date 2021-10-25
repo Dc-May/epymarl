@@ -25,6 +25,8 @@ class Logger:
         self.use_sacred = True
 
     def log_stat(self, key, value, t, to_sacred=True):
+        if key == 'grad_norm':
+            value = value.item()
         self.stats[key].append((t, value))
 
         if self.use_tb:
