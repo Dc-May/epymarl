@@ -1,6 +1,7 @@
 from collections import defaultdict
 import logging
 import numpy as np
+from torch import is_tensor
 
 class Logger:
     def __init__(self, console_logger):
@@ -25,7 +26,7 @@ class Logger:
         self.use_sacred = True
 
     def log_stat(self, key, value, t, to_sacred=True):
-        if key == 'grad_norm':
+        if is_tensor(value):
             value = value.item()
         self.stats[key].append((t, value))
 
