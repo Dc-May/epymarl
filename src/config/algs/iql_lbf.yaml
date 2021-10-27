@@ -27,4 +27,4 @@ double_q: True
 use_rnn: True
 mixer: # Mixer becomes None
 
-name: "iql"
+name: "iql_lbf"

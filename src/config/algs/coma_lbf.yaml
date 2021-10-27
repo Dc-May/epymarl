@@ -37,5 +37,5 @@ entropy_coef: 0.001
 q_nstep: 10  # 0 corresponds to default Q, 1 is r + gamma*Q, etc
 critic_type: coma_critic
 
-name: "coma"
+name: "coma_lbf"
 t_max: 20050000
