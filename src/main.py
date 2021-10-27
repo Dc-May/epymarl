@@ -6,6 +6,7 @@ from os.path import dirname, abspath
 from copy import deepcopy
 from sacred import Experiment, SETTINGS
 from sacred.observers import FileStorageObserver, MongoObserver
+from sacred.observers import QueuedMongoObserver
 from sacred.utils import apply_backspaces_and_linefeeds
 import sys
 import torch as th
@@ -15,7 +16,10 @@ import pymongo
 import ssl
 from run import run
 import configparser
+from datetime import datetime
 
+now = datetime.now()
+date_time = now.strftime('%H:%M:%S:%f_%m/%d/%Y')
 db_config = configparser.ConfigParser()
 db_config.read(os.getcwd()+"\\src\\db_config.ini")
 
@@ -124,8 +128,8 @@ if __name__ == '__main__':
     # ssl=True, 
     # ssl_cert_reqs=ssl.CERT_NONE
     # ) 
-    ex.observers.append(MongoObserver(db_name="testsacred", client=client, collection_prefix='testmolly')) #url='172.31.5.187:27017'))
-    ex.observers.append(FileStorageObserver.create("./results/sacred"))
+    ex.observers.append(QueuedMongoObserver(db_name="testsacred", client=client, collection_prefix=config_dict['name'] +date_time)) #url='172.31.5.187:27017'))
+    ex.observers.append(FileStorageObserver.create("./results/sacred1"))
     # ex.observers.append(MongoObserver())
     
     ex.run_commandline(params)
