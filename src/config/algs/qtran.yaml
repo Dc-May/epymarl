@@ -5,6 +5,7 @@ action_selector: "epsilon_greedy"
 epsilon_start: 1.0
 epsilon_finish: 0.05
 epsilon_anneal_time: 50000
+evaluation_epsilon: 0.0
 
 runner: "episode"
 
@@ -20,9 +21,11 @@ double_q: True
 mixer: "qtran_base"
 mixing_embed_dim: 64
 qtran_arch: "qtran_paper"
-
+use_rnn: 'False'
 opt_loss: 1
 nopt_min_loss: 0.1
+standardise_rewards: True
+target_update_interval_or_tau : 200
 
 network_size: small
 
