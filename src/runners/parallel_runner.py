@@ -224,14 +224,14 @@ class ParallelRunner:
         for _, run in enumerate(self.agent_returns):
             env_dummy = [0 for agent in range(self.args.n_agents)]
             for env_index, env_result in enumerate(run):
-                # print('eun',env_index)
+                print('eun',env_index)
                 # This is where we add each run result up for each agent so that we are left with one sum per env
                 # env_result = [agent0, agent1]
                 # need a dummy list here
                 # print('run, env_result', run, env_result)
-                # print('curr_agent_returns', curr_agent_returns)
+                print('curr_agent_returns', len(curr_agent_returns))
                 for agent in range(self.args.n_agents):
-                    # print('run, env_result, agent', run,env_result,agent)
+                    print('run, env_result, agent', len(run),len(env_result),agent)
                     curr_agent_returns[env_index][agent] += env_result[agent]
 
 
