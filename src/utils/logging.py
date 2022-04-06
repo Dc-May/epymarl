@@ -15,9 +15,10 @@ class Logger:
 
     def setup_tb(self, directory_name):
         # Import here so it doesn't have to be installed if you don't use it
-        from tensorboard_logger import configure, log_value
+        from tensorboard_logger import configure, log_value, log_histogram
         configure(directory_name)
         self.tb_logger = log_value
+        self.tb_histogram = log_histogram
         self.use_tb = True
 
     def setup_sacred(self, sacred_run_dict):
@@ -43,6 +44,12 @@ class Logger:
             
             self._run_obj.log_scalar(key, value, t)
 
+    def log_hist(self, key, weights, t):
+        if self.use_tb:
+            weights = weights.detach().numpy()
+            self.tb_histogram(key, weights, t)
+        else:
+            pass
     def print_recent_stats(self):
         log_str = "Recent Stats | t_env: {:>10} | Episode: {:>8}\n".format(*self.stats["episode"][-1])
         i = 0
