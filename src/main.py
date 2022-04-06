@@ -6,7 +6,7 @@ from os.path import dirname, abspath
 from copy import deepcopy
 from sacred import Experiment, SETTINGS
 from sacred.observers import FileStorageObserver, MongoObserver
-from sacred.observers import QueuedMongoObserver
+# from sacred.observers import QueuedMongoObserver
 from sacred.utils import apply_backspaces_and_linefeeds
 import sys
 import torch as th
@@ -21,12 +21,12 @@ from datetime import datetime
 now = datetime.now()
 date_time = now.strftime('%H:%M:%S:%f_%m/%d/%Y')
 db_config = configparser.ConfigParser()
-db_config.read(os.getcwd()+"\\src\\db_config.ini")
+db_config.read(os.getcwd()+"\\db_config.ini")
 
 SETTINGS['CAPTURE_MODE'] = "no" # set to "no" if you want to see stdout/stderr in console
 logger = get_logger()
 
-ex = Experiment("pymarl", save_git_info=False)
+ex = Experiment()
 ex.logger = logger
 ex.captured_out_filter = apply_backspaces_and_linefeeds
 
@@ -119,17 +119,17 @@ if __name__ == '__main__':
     file_obs_path = os.path.join(results_path, f"sacred/{config_dict['name']}/{map_name}")
     
 
-    client = pymongo.MongoClient(db_config['mongodb']['db_url'],
-                                    ssl = True, 
-                                    ssl_cert_reqs= ssl.CERT_NONE
-    )
+    # client = pymongo.MongoClient(db_config['mongodb']['db_url'],
+    #                                 ssl = True, 
+    #                                 ssl_cert_reqs= ssl.CERT_NONE
+    # )
 
     # client = pymongo.MongoClient("mongodb+srv://peteradmin:peteradmin@testcluster1.zerxv.mongodb.net/testdatebase?retryWrites=true&w=majority",
-    # ssl=True, 
+    # ssl=True,
     # ssl_cert_reqs=ssl.CERT_NONE
-    # ) 
-    ex.observers.append(QueuedMongoObserver(db_name="testsacred", client=client, collection_prefix=config_dict['name'] +date_time)) #url='172.31.5.187:27017'))
-    ex.observers.append(FileStorageObserver.create("./results/sacred1"))
+    # )
+    # ex.observers.append(QueuedMongoObserver(db_name="ipppo_wtf_test", client=client, collection_prefix=config_dict['name'] + date_time)) #url='172.31.5.187:27017'))
+    ex.observers.append(FileStorageObserver.create("./results/lbf_coop_qlearning"))
     # ex.observers.append(MongoObserver())
     
     ex.run_commandline(params)
