@@ -1,0 +1,16 @@
+env: "harvest"
+
+env_args:
+  key: null
+  time_limit: 100
+  pretrained_wrapper: null
+  n_agents: 0
+
+test_greedy: True
+test_nepisode: 100
+test_interval: 50000
+log_interval: 50000
+runner_log_interval: 10000
+learner_log_interval: 10000
+t_max: 2050000
+use_cuda: False # Use gpu by default unless it isn't available
