@@ -2,6 +2,8 @@ from envs import REGISTRY as env_REGISTRY
 from functools import partial
 from components.episode_buffer import EpisodeBatch
 import numpy as np
+import math
+from torch import nn
 
 
 class EpisodeRunner:
@@ -12,7 +14,9 @@ class EpisodeRunner:
         self.batch_size = self.args.batch_size_run
         assert self.batch_size == 1
 
+        # This is where env.make() is called
         self.env = env_REGISTRY[self.args.env](**self.args.env_args)
+
         self.episode_limit = self.env.episode_limit
         self.t = 0
 
@@ -50,12 +54,12 @@ class EpisodeRunner:
 
     def run(self, test_mode=False):
         '''
-        Items that have been added by me:
+        Items that have been added by Peter:
         * current_episode_agent_returns
         '''
         self.reset()
         # this clears the agent returns list every episode. 
-        # TODO: Works
+        # This was added by me
         current_episode_agent_returns = [0]*self.args.n_agents
         terminated = False
         episode_return = 0
@@ -76,7 +80,9 @@ class EpisodeRunner:
             actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
 
             reward, terminated, env_info = self.env.step(actions[0])
-            episode_return += reward
+            # TODO: March 14 2022, this appeases the algorithm but still needs to be toggled for the scenario
+            episode_return += math.fsum(reward)
+            # episode_return += reward
             # TODO: works 
             for i, value in enumerate(env_info['agent_rewards']): 
                     current_episode_agent_returns[i] += value
@@ -126,7 +132,26 @@ class EpisodeRunner:
             self._log_info(log_prefix)
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
             self._log(cur_returns, cur_stats, log_prefix)
-            # time to log 
+            #TODO: this is where I will log the histograms:
+            # if self.args.use_rnn:
+            #     self._log_hidden_states(self.mac.hidden_states, self.t_env)
+
+            # print('modules', self.mac.agent)
+            # for index, layer in enumerate(self.mac.agent._modules):
+            #     print('layer', layer)
+            # for layer in self.mac.agent.children():
+            #     if isinstance(layer, nn.Linear):
+            #         print('linear layer', layer)
+            #         print(layer.state_dict()['weight'])
+            #         print(layer.state_dict()['bias'])
+            #     elif isinstance(layer,nn.GRUCell):
+            #         print("GRU layer")
+            #         print(layer)
+            #         print(layer.state_dict()['weight_ih'])
+            #         print(layer.state_dict()['bias_ih'])
+
+
+            # time to log
             self._log_info(log_prefix)
 
             if hasattr(self.mac.action_selector, "epsilon"):
@@ -166,3 +191,17 @@ class EpisodeRunner:
 
         # TODO: works
         self.agent_returns = [] 
+
+    def _log_hidden_states(self, weights, stats):
+        '''
+        This method logs the hidden states of the GRU if it is present.
+        '''
+        for i, weight in enumerate(weights):
+            layer = 'Hidden State' + str(i)
+            # print(weight)
+            self.logger.log_hist(layer, weight, stats)
+
+    def _log_weights(self, weights, stats):
+        print('In _log_weights')
+        print(weights)
+        print(stats)
