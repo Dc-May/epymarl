@@ -3,6 +3,13 @@ import numpy as np
 from functools import partial
 from components.episode_buffer import EpisodeBatch
 
+from pathlib import Path
+import subprocess
+# TODO: Oct 27, 2021; need to set up the imports here to import the TREX package here 
+
+
+
+
 class GymRunner:
     def __init__(self, args, logger):
         self.args = args
@@ -21,6 +28,27 @@ class GymRunner:
         self.new_batch = partial(EpisodeBatch, scheme, groups, self.batch_size, self.episode_limit + 1,
                                  preprocess=preprocess, device=self.args.device)
         self.mac = mac
+
+
+    def start_trex(self):
+        """
+        This method uses subprocesses to launch the TREX-core package
+        trex is launched using
+
+
+
+        """
+        # Setting up the path to the environments
+
+
+
+    #     Args for the launch
+    #     Fixme: Nov 29, 2021; At the moment there are no args to the launch, but I will be changing that.
+
+        # Call the subprocess
+        # python main.py
+        subprocess.call()
+
 
     def get_env_info(self):
         return self.env.get_env_info()
@@ -42,3 +70,11 @@ class GymRunner:
     def _log(self, returns, stats, prefix):
         pass 
 
+
+
+def __main():
+    runner = GymRunner()
+    runner.start_trex()
+
+if __name__ == '__main__':
+    __main()

@@ -14,7 +14,7 @@ from runners import REGISTRY as r_REGISTRY
 from controllers import REGISTRY as mac_REGISTRY
 from components.episode_buffer import ReplayBuffer
 from components.transforms import OneHot
-
+from torch import nn
 
 def run(_run, _config, _log):
 
@@ -44,7 +44,7 @@ def run(_run, _config, _log):
     args.unique_token = unique_token
     if args.use_tensorboard:
         tb_logs_direc = os.path.join(
-            dirname(dirname(abspath(__file__))), "results", "tb_logs"
+            dirname(dirname(abspath(__file__))), "results", "tb_log"
         )
         tb_exp_direc = os.path.join(tb_logs_direc, "{}").format(unique_token)
         logger.setup_tb(tb_exp_direc)
@@ -94,18 +94,32 @@ def run_sequential(args, logger):
     args.state_shape = env_info["state_shape"]
 
     # Default/Base scheme
-    scheme = {
-        "state": {"vshape": env_info["state_shape"]},
-        "obs": {"vshape": env_info["obs_shape"], "group": "agents"},
-        "actions": {"vshape": (1,), "group": "agents", "dtype": th.long},
-        "avail_actions": {
-            "vshape": (env_info["n_actions"],),
-            "group": "agents",
-            "dtype": th.int,
-        },
-        "reward": {"vshape": (1,)},
-        "terminated": {"vshape": (1,), "dtype": th.uint8},
-    }
+    if args.env == "gymcoop" or args.env == 'harvest':
+        scheme = {
+            "state": {"vshape": env_info["state_shape"]},
+            "obs": {"vshape": env_info["obs_shape"], "group": "agents"},
+            "actions": {"vshape": (1,), "group": "agents", "dtype": th.long},
+            "avail_actions": {
+                "vshape": (env_info["n_actions"],),
+                "group": "agents",
+                "dtype": th.int,
+            },
+            "reward": {"vshape": (1,), "group":"agents"},
+            "terminated": {"vshape": (1,), "dtype": th.uint8},
+        }
+    else:
+        scheme = {
+            "state": {"vshape": env_info["state_shape"]},
+            "obs": {"vshape": env_info["obs_shape"], "group": "agents"},
+            "actions": {"vshape": (1,), "group": "agents", "dtype": th.long},
+            "avail_actions": {
+                "vshape": (env_info["n_actions"],),
+                "group": "agents",
+                "dtype": th.int,
+            },
+            "reward": {"vshape": (1,)},
+            "terminated": {"vshape": (1,), "dtype": th.uint8},
+        }
     groups = {"agents": args.n_agents}
     preprocess = {"actions": ("actions_onehot", [OneHot(out_dim=args.n_actions)])}
 
@@ -222,10 +236,13 @@ def run_sequential(args, logger):
             or model_save_time == 0
         ):
             model_save_time = runner.t_env
-            save_path = os.path.join(
-                args.local_results_path, "models", args.unique_token, str(runner.t_env)
-            )
+            # TODO; change me back
+            # save_path = os.path.join(
+            #     args.local_results_path, "models", args.unique_token, str(runner.t_env)
+            # )
             # "results/models/{}".format(unique_token)
+            save_path = os.path.join('results/models/tests', str(runner.t_env))
+            print('Save Path', save_path)
             os.makedirs(save_path, exist_ok=True)
             logger.console_logger.info("Saving models to {}".format(save_path))
 
@@ -236,9 +253,30 @@ def run_sequential(args, logger):
         episode += args.batch_size_run
 
         if (runner.t_env - last_log_T) >= args.log_interval:
+            # TODO: this is where the logging happens for each 5000 steps:
             logger.log_stat("episode", episode, runner.t_env)
             logger.print_recent_stats()
+            # print('Learner parameters', learner.params)
+            # FIXME: March 16 2021; figure out how to log histograms of ac methods
+            # for index, param in enumerate(learner.params):
+            #     print('index', index)
+            #     print('weight vector or bias', param)
             last_log_T = runner.t_env
+            # if args.use_rnn:
+            #     _log_hidden_states(mac.hidden_states, runner.t_env, logger)
+            # for index,layer in enumerate(mac.agent.children()):
+            #     if isinstance(layer, nn.Linear):
+            #         print('linear layer', layer)
+            #         # print(layer.state_dict()['weight'])
+            #         # print(layer.state_dict()['bias'])
+            #         _log_linear_weights(layer, index, runner.t_env, logger)
+            #
+            #     elif isinstance(layer,nn.GRUCell):
+            #         print("GRU layer")
+            #         # print(layer)
+            #         # print(layer.state_dict()['weight_ih'])
+            #         # print(layer.state_dict()['bias_ih'])
+            #         _log_GRU_weights(layer, index, runner.t_env, logger)
 
     runner.close_env()
     logger.console_logger.info("Finished Training")
@@ -262,3 +300,28 @@ def args_sanity_check(config, _log):
         ) * config["batch_size_run"]
 
     return config
+
+# March 07, 2022; These are all functions that I added for tensorboard.
+def _log_hidden_states(weights, stats, logger):
+    '''
+    This method logs the hidden states of the GRU if it is present.
+    '''
+    for i, weight in enumerate(weights):
+        layer = 'Hidden State' + str(i)
+        # print(weight)
+        logger.log_hist(layer, weight, stats)
+
+
+def _log_linear_weights(layer,index,t, logger):
+    # this needs to log weights and bias
+    index = str(index)
+    logger.log_hist('linear weight'+ index, layer.state_dict()['weight'], t)
+    logger.log_hist('linear bias' + index, layer.state_dict()['bias'], t)
+
+
+def _log_GRU_weights(layer, index, t, logger):
+    index = str(index)
+    logger.log_hist('GRU input weight' + index, layer.state_dict()['weight_ih'], t)
+    logger.log_hist('GRU input bias' + index, layer.state_dict()['bias_ih'], t)
+    logger.log_hist('GRU hidden weight' + index, layer.state_dict()['weight_hh'], t)
+    logger.log_hist('GRU hidden bias' + index, layer.state_dict()['bias_hh'], t)
