@@ -3,7 +3,7 @@
 action_selector: "soft_policies"
 mask_before_softmax: True
 hidden_dim : 128
-runner: "parallel"
+runner: "parallel_coop"
 
 buffer_size: 10
 batch_size_run: 10
@@ -24,7 +24,7 @@ obs_individual_obs: False
 
 # use IA2C
 agent_output_type: "pi_logits"
-learner: "ppo_learner"
+learner: "ppo_coop_learner"
 entropy_coef: 0.001
 standardise_rewards: False
 use_rnn: False
