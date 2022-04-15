@@ -101,8 +101,8 @@ class ParallelRunner:
         episode_returns = [0 for _ in range(self.batch_size)]
         episode_lengths = [0 for _ in range(self.batch_size)]
         agent_returns = [0 for _ in range(self.batch_size)]
-        curr_agent_returns=[[0,0] for _ in range(self.batch_size)] #TODO: Sept 20; I think that this is what is causing the extension is not working properly. 
-        
+        curr_agent_returns=[[0]*self.env_info['n_agents'] for _ in range(self.batch_size)] #TODO: Sept 20; I think that this is what is causing the extension is not working properly.
+
         
         self.mac.init_hidden(batch_size=self.batch_size)
         terminated = [False for _ in range(self.batch_size)]
@@ -154,17 +154,19 @@ class ParallelRunner:
                 if not terminated[idx]:
                     data = parent_conn.recv() #GETS THE DATA DICTIONARY FROM EACH PARALLEL ENV 
                     # Remaining data for this current timestep
+                    # TODO: this is where reward goes to the buffer
                     post_transition_data["reward"].append((data["reward"],)) 
-                    
+
+                    #collect the individual reward data from the info parameter.
                     agent_returns[idx] = data["info"]["agent_rewards"]
-                  
+                    # Fixme: this will need to be turned into a math.fsum(data['reward'])
                     episode_returns[idx] += data["reward"] # Add the current step return to the episode returns for each process 
                     episode_lengths[idx] += 1
                     if not test_mode:
                         self.env_steps_this_run += 1
 
                     env_terminated = False
-            
+                    # clean data info
                     data['info'].pop('agent_rewards')
                     if data["terminated"]:
                         final_env_infos.append(data["info"])
@@ -179,7 +181,7 @@ class ParallelRunner:
                     pre_transition_data["obs"].append(data["obs"])
             
            
-            self.agent_returns.append(tuple(agent_returns))
+            self.agent_returns_array.append(tuple(agent_returns))
 
             # print('after append',self.agent_returns)
             # Add post_transiton data into the batch
@@ -249,7 +251,7 @@ class ParallelRunner:
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
             self._log(cur_returns, cur_stats, log_prefix)
             
-            self._log_agent_rewards(self.agent_returns_array, log_prefix)
+            # self._log_agent_rewards(self.agent_returns_array, log_prefix)
             if hasattr(self.mac.action_selector, "epsilon"):
                 self.logger.log_stat("epsilon", self.mac.action_selector.epsilon, self.t_env)
             self.log_train_stats_t = self.t_env
@@ -308,8 +310,6 @@ def env_worker(remote, env_fn):
             # Take a step in the environment
             # TODO: This is where my env change interacts with the code
             reward, terminated, env_info = env.step(actions)
-            process_id = os.getpid()
-            # print(process_id,'woo' ,env_info)
             # Return the observations, avail_actions and state to make the next action
             state = env.get_state()
             avail_actions = env.get_avail_actions()
@@ -355,6 +355,7 @@ class CloudpickleWrapper():
         import cloudpickle
         return cloudpickle.dumps(self.x)
     def __setstate__(self, ob):
-        import pickle
+        import pickle5 as pickle
+        print(pickle.DEFAULT_PROTOCOL)
         self.x = pickle.loads(ob)
 
