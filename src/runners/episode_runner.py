@@ -81,8 +81,10 @@ class EpisodeRunner:
 
             reward, terminated, env_info = self.env.step(actions[0])
             # TODO: March 14 2022, this appeases the algorithm but still needs to be toggled for the scenario
-            episode_return += math.fsum(reward)
-            # episode_return += reward
+            # TODO: May 24 2022: this toggle can be done through self.args.name .
+            # Parse the string and then check if coop is in the name
+            # episode_return += math.fsum(reward)
+            episode_return += reward
             # TODO: works 
             for i, value in enumerate(env_info['agent_rewards']): 
                     current_episode_agent_returns[i] += value

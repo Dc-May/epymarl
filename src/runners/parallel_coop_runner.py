@@ -162,7 +162,7 @@ class ParallelCoopRunner:
                     # agent_returns[idx] = data["info"]["agent_rewards"]
                     for index, reward in enumerate(data['reward']):
                          agent_returns[index].append(reward)
-                    # Fixme: this will need to be turned into a math.fsum(data['reward'])
+
                     episode_returns[idx] += math.fsum(data[
                         "reward"])  # Add the current step return to the episode returns for each process
                     episode_lengths[idx] += 1
