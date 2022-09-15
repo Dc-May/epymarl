@@ -7,10 +7,11 @@ from pathlib import Path
 import subprocess
 # TODO: Oct 27, 2021; need to set up the imports here to import the TREX package here 
 
-
-
-
 class GymRunner:
+    """
+    This is the runner object for the TrexEnv object.
+
+    """
     def __init__(self, args, logger):
         self.args = args
         self.logger = logger
@@ -34,16 +35,10 @@ class GymRunner:
         """
         This method uses subprocesses to launch the TREX-core package
         trex is launched using
-
-
-
         """
         # Setting up the path to the environments
-
-
-
-    #     Args for the launch
-    #     Fixme: Nov 29, 2021; At the moment there are no args to the launch, but I will be changing that.
+        #Args for the launch
+        #Fixme: Nov 29, 2021; At the moment there are no args to the launch, but I will be changing that.
 
         # Call the subprocess
         # python main.py
@@ -73,6 +68,9 @@ class GymRunner:
 
 
 def __main():
+    """
+    This is used for debugging purposes only
+    """
     runner = GymRunner()
     runner.start_trex()
 

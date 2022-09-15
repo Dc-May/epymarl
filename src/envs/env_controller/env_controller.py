@@ -66,8 +66,9 @@ class Controller:
     # If client has not connected, retry registration
     async def register_success(self, success):
         await self.delay(utils.secure_random.random() * 10)
-        print("register success", success)
+        print("Envcontroller register success", success)
         if not success:
+            print("envcontroller registration pending")
             await self.register()
         # self.status['registered_on_server'] = True
 
@@ -80,7 +81,7 @@ class NSSimulation(socketio.AsyncClientNamespace):
         self.controller = controller
 
     async def on_connect(self):
-        print("Connected or something")
+        print("envcontroller Connected, starting registration process")
         await self.controller.register()
 
     async def on_pre_transition_data(self, data):

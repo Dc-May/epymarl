@@ -6,9 +6,13 @@ import TREX_Core._utils.runner
 import os
 
 class TrexEnv(MultiAgentEnv):
+    """
+
+    """
     def __init__(self, **kwargs):
         self.terminated = False
-        self.launch_TREX()
+        self.launch_TREX() #FIXME: August 16 2022, this is where TREX is launched, no where else.
+
         if kwargs['using_batteries']:
             self.using_batteries = True
         else:
@@ -34,16 +38,23 @@ class TrexEnv(MultiAgentEnv):
         import time
 
         time.sleep(delay)
+        print("the trex args", args)
         try:
-            subprocess.run(['venv/bin/python', args[0], *args[1]])
+            print('Trying to find the venv python worked')
+            subprocess.run(['venv/Scripts/python', args[0], *args[1]]) #FIXME: August 29 2022,  this is coded for postix system
         except:
+            print('Excepting: using the atpetepymarl python')
             subprocess.run(['C:/Users/molly/.virtualenvs/atpeterpymarl-qnIKOvrx/Scripts/python', args[0], *args[1]])
-        finally:
-            subprocess.run(['python', args[0], *args[1]])
+
 
 
     def read_trex_configs(self, path=None):
-        print("reading trex config file")
+        '''
+        This method is for reading the config of the trex experiment in order to get some required information
+        to the trexenv object
+        #todo: As of August 16 2022, this does not work and is a placeholder
+        '''
+        # print("reading trex config file")
         n_agents = 0
         action_space = []
         generation_size = 0
@@ -55,14 +66,14 @@ class TrexEnv(MultiAgentEnv):
         :return:
         """
         import sys
-        print("launching TREX")
+        print("launching TREX in trexenv.py")
         simulations = [
             # {'simulation_type': 'baseline'},
             {'simulation_type': 'training'}
             # {'simulation_type': 'validation'}
         ]
         runner = TREX_Core._utils.runner.Runner("TB8", resume=False, purge=False)
-        launch_list = runner.run(simulations, run=False)
+        launch_list = runner.run(simulations, run=False) #running with run=False just creates a launch list
 
 
         '''
@@ -70,24 +81,27 @@ class TrexEnv(MultiAgentEnv):
         ( Absolute path , args list [] )
 
         '''
-        path_to_env_client = os.getcwd() + '/src/envs/env_controller/sio_client.py'
+        path_to_env_client = os.getcwd() + '/envs/env_controller/sio_client.py'
+
         # FIXME: March 8 2022, hardcode below. Plz fix market id
-        args_list = ['--port=3501', '--market_id=training']
+        args_list = ['--port=3500', '--market_id=training']
 
         launch_list.append((path_to_env_client, args_list))
-
+        #launch the TREX launchlist from inside EPYMARL
         from multiprocessing import Pool
         pool_size = len(launch_list)
         pool = Pool(pool_size)
-        pool.map(self.run_subprocess, launch_list)
+        pool.map(self.run_subprocess, launch_list) #FIXME: July 2022: this map seems to be giving me a error to do with the launch list.
         pool.close()
 
 
     def connect_envController(self):
         """"
         This method creates a envController and connect it to TREX
+        # TODO: As of August 16 2022, this has not been implemented.
         """
-        self.envController = envController({"sim": "information"})
+
+        return 0
 
 
     def get_state_size(self):
@@ -104,18 +118,22 @@ class TrexEnv(MultiAgentEnv):
     def get_obs(self, timestep):
         """
         This gets the full observation state for that timestep
+        #TODO: As of August 16 2022, this is not implemented
         :return:
         """
-        print("not done yet, go check the database yourself.")
+
         return 0
 
     def get_obs_agent(self, agent_id):
+        '''
+        #todo: as of august 16, 2022 this is not yet implemented
+        '''
         agent_obs = []
         return agent_obs
 
     def get_obs_size(self):
         """
-        This method returns the size of each individual agents
+        This method returns the size of each individual agents observation space.
         """
         if self.using_batteries:
             obs_size = 5
@@ -138,10 +156,15 @@ class TrexEnv(MultiAgentEnv):
         return tot_actions
 
     def render(self, mode="human"):
-        print('This is not done yet, just read the matrix ')
+        '''
+        #TODO: August 16, 2022: make this compatible with the browser code that steven has finished.
+        '''
         return 0
 
     def step(self, actions):
+        '''
+        #TODO: August 16 2022, as of this moment this is still just pseudocode.
+        '''
         # terminated:
         # this will need to be able to get set on the end of each generation
         terminated = self.envController.terminated()
