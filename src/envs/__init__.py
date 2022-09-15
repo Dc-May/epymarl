@@ -5,8 +5,8 @@ import pretrained
 from envs.multiagentenv import MultiAgentEnv
 import lbforaging
 from envs.trexenv import TrexEnv
-# TODO: import the social_dilemma package here
-from social_dilemmas.envs.harvest import HarvestEnv
+
+
 import sys
 import os
 import gym
@@ -337,149 +337,7 @@ class _GymmaCooperativeWrapper(MultiAgentEnv):
         return {}
 
 
-class _HarvestWrapper(MultiAgentEnv):
-    """
-    This wrapper links the harvest environment to epymarl
-    """
-    def __init__(self, key, time_limit, pretrained_wrapper, **kwargs):
 
-
-        if kwargs['n_agents']:
-            self.n_agents = kwargs['n_agents']
-
-        self.episode_limit = time_limit
-
-        self._env = HarvestEnv(num_agents = self.n_agents)
-
-        # Adding a timelimt to HarvestEnv
-        self._env = TimeLimit(self._env, max_episode_steps=time_limit)
-        # TODO: this is vestigial code
-        if pretrained_wrapper:
-            self._env = getattr(pretrained, pretrained_wrapper)(self._env)
-
-
-        self._obs = None
-
-        # FIXME: Assumes homogenous agents
-        self.longest_action_space = self._env.action_space
-        # FIXME: Assumes homogenous agents
-
-        for value in self._env.observation_space.values():
-            self.longest_observation_space = value
-
-        self._seed = kwargs["seed"]
-        self._env.seed(self._seed)
-
-    def step(self, actions):
-        """ Returns reward, terminated, info """
-        # TODO: actions will have to be converted into the harvest format here : dictionary
-        # TODO: will need to check the current step against the max time limit
-        # actions = [int(a) for a in actions]
-        encode_actions = {}
-        # Encode the action into the
-        for i in range(self.n_agents):
-            key = 'agent-' + str(i)
-            value = int(actions[i])
-            encode_actions[key] = value
-
-        self._obs, reward, done, info = self._env.step(encode_actions)
-        self.decode_observations()
-
-        decoded_rewards = [reward for reward in reward.values()]
-
-
-        # TODO: will need to increment the elapsed time here
-
-
-        return decoded_rewards, all(done), {'agent_rewards': decoded_rewards}
-
-
-    def get_obs(self):
-        """ Returns all agent observations in a list """
-        return self._obs
-
-    def get_obs_agent(self, agent_id):
-        """ Returns observation for agent_id """
-        raise self._obs[agent_id]
-
-    def get_obs_size(self):
-        """ Returns the shape of the observation """
-        return flatdim(self.longest_observation_space)
-
-    def get_state(self):
-        # FIXME: can probably just go back to concatenation.
-        flat_state = np.reshape(self._obs, self.get_state_size())
-        return flat_state.astype(np.float32)
-
-
-    def get_state_size(self):
-        """ Returns the shape of the state"""
-        return self.n_agents * flatdim(self.longest_observation_space)
-
-    def get_obs_agent(self, agent_id):
-        """ Returns observation for agent_id """
-        raise self._obs[agent_id]
-
-    def get_obs_size(self):
-        """ Returns the shape of the observation """
-        return flatdim(self.longest_observation_space)
-
-    def get_state_size(self):
-        """ Returns the shape of the state"""
-        return self.n_agents * flatdim(self.longest_observation_space)
-
-    def get_avail_actions(self):
-        avail_actions = []
-        for agent_id in range(self.n_agents):
-            avail_agent = self.get_avail_agent_actions(agent_id)
-            avail_actions.append(avail_agent)
-        return avail_actions
-
-    def get_avail_agent_actions(self, agent_id):
-        """ Returns the available actions for agent_id """
-        valid = flatdim(self._env.action_space) * [1]
-        return valid
-
-    def get_total_actions(self):
-        """ Returns the total number of actions an agent could ever take """
-        # TODO: This is only suitable for a discrete 1 dimensional action space for each agent
-        return flatdim(self.longest_action_space)
-
-    def reset(self):
-        """ Returns initial observations and states"""
-        # FIXME make sure that you actually use these
-        # decoded_obs = []
-        self._obs = self._env.reset()
-        # for agent, observation in self._obs.items():
-        #     for obs in observation.values():
-        #         decoded_obs.append(np.reshape(obs, flatdim(self.longest_observation_space)))
-        # # FIXME get_obs() and get_state()
-        # decoded_obs = self.decode_observations(self._obs)
-        # self._obs = decoded_obs
-        self.decode_observations()
-        return self.get_obs(), self.get_state()
-
-    def render(self):
-        self._env.render()
-
-    def close(self):
-        self._env.close()
-
-    def seed(self):
-        return self._env.seed
-
-    def save_replay(self):
-        pass
-
-    def get_stats(self):
-        return {}
-
-    def decode_observations(self):
-        decoded_observations = []
-        for agent, observation in self._obs.items():
-            for obs in observation.values():
-                decoded_observations.append(np.reshape(obs, flatdim(self.longest_observation_space)))
-        self._obs = decoded_observations
 
 
 REGISTRY["gymma"] = partial(env_fn, env=_GymmaWrapper)
@@ -488,4 +346,3 @@ REGISTRY["gymcoop"] = partial(env_fn, env=_GymmaCooperativeWrapper)
 # Registering a new environment option in the config for TREX.
 REGISTRY["TREX"] = partial(env_fn, env=TrexEnv)
 # TODO: double check if this actually works properly
-REGISTRY["harvest"] = partial(env_fn, env=_HarvestWrapper)
