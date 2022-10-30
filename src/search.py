@@ -6,8 +6,10 @@ from collections import defaultdict
 import re
 import yaml
 import random
-
+import sys
 import click
+from joblib import Parallel, delayed 
+
 
 _CPU_COUNT = multiprocessing.cpu_count() - 1
 
@@ -66,8 +68,10 @@ def _compute_combinations(config_file, shuffle, seeds):
 
 
 def work(cmd):
+
     cmd = cmd.split(" ")
-    return subprocess.call(cmd, shell=False)
+    print('Command from inside work, executable', cmd, sys.executable)
+    return subprocess.run(cmd, shell=False, executable=sys.executable)
 
 
 @click.group()
@@ -108,15 +112,25 @@ def run(ctx, config, shuffle, seeds):
 )
 @click.pass_obj
 def locally(combos, cpus):
+    executabe = sys.executable
     configs = ["python main.py " + " ".join([c for c in combo if c.startswith("--")]) + " with " + " ".join([c for c in combo if not c.startswith("--")]) for combo in combos]
 
     click.confirm(
         f"There are {click.style(str(len(combos)), fg='red')} combinations of configurations. Up to {cpus} will run in parallel. Continue?",
         abort=True,
     )
-
-
+    
+    # multiprocessing.set_executable(sys.executable)
+    # multiprocessing.set_start_method('fork')
+    #  TODO: Try doing joblib for this
+    # print(configs)
+    # print(len(configs))
+    backend = 'loky'
+    # r =  Parallel(n_jobs = cpus, backend = backend)(delayed(work)(config) for config in configs)
     pool = multiprocessing.Pool(processes=cpus)
+    # process = multiprocessing.Process(target=work, args = configs[0])
+    # process.start()
+
     print(pool.map(work, configs))
 
 
@@ -132,7 +146,7 @@ def single(combos, index):
 
     config = combos[index]
     cmd = "python main.py " + " ".join([c for c in config if c.startswith("--")]) + " with " + " ".join([c for c in config if not c.startswith("--")])
-    print(cmd)
+    # print(cmd)
     work(cmd)
 
 

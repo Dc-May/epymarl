@@ -1,0 +1,45 @@
+exclude: null
+grid-search:
+
+  "--config":
+    - "qmix_lbf_coop"
+
+
+  lr:
+    - 0.0001
+    - 0.0003
+    - 0.0005
+
+  standardise_rewards:
+    - True
+
+  use_rnn:
+    - True
+
+  target_update_interval_or_tau:
+    - 0.01
+
+  hidden_dim:
+    - 128
+
+  evaluation_epsilon:
+    - 0.05
+
+  t_max:
+    - 2050000
+  test_nepisode:
+    - 100
+  test_interval:
+    - 25000
+  log_interval:
+    - 25000
+  save_model_interval:
+    - 50000
+  save_model:
+    - false
+
+grid-search-groups:
+  env0:
+    - "--env-config": "gymcoop"
+    - env_args.key: Foraging-10x10-3p-3f-v0
+    - env_args.time_limit: 25

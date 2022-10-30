@@ -1,3 +1,5 @@
+import sys
+print('atpeterepymarl main.py executable', sys.prefix)
 import numpy as np
 import os
 import random
@@ -129,7 +131,7 @@ if __name__ == '__main__':
     # ssl_cert_reqs=ssl.CERT_NONE
     # )
     # ex.observers.append(QueuedMongoObserver(db_name="ipppo_wtf_test", client=client, collection_prefix=config_dict['name'] + date_time)) #url='172.31.5.187:27017'))
-    ex.observers.append(FileStorageObserver.create("./results/lbf_coop_qlearning"))
+    ex.observers.append(FileStorageObserver.create("./results/testing_hyperparameter_search"))
     # ex.observers.append(MongoObserver())
     
     ex.run_commandline(params)

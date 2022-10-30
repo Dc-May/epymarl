@@ -15,9 +15,10 @@ from controllers import REGISTRY as mac_REGISTRY
 from components.episode_buffer import ReplayBuffer
 from components.transforms import OneHot
 from torch import nn
+import sys
 
 def run(_run, _config, _log):
-
+    print('run.py executable, after sacred takes controll', sys.prefix)
     # check args sanity
     _config = args_sanity_check(_config, _log)
 
@@ -36,16 +37,20 @@ def run(_run, _config, _log):
 
     try:
         map_name = _config["env_args"]["map_name"]
+        print('try success', map_name)
     except:
-        map_name = _config["env_args"]["key"]   
+        map_name = _config["env_args"]["key"]
+        print('except caught', map_name)
     # unique_token = f"{_config['name']}_seed{_config['seed']}_{map_name}_{datetime.datetime.now()}"
+    print('map_name', map_name)
     unique_token = f"{_config['name']}_seed{_config['seed']}_{map_name}"
 
     args.unique_token = unique_token
     if args.use_tensorboard:
         tb_logs_direc = os.path.join(
-            dirname(dirname(abspath(__file__))), "results", "tb_log"
+            dirname(dirname(abspath(__file__))), "results", "tb_log_testing_hyperparameter"
         )
+
         tb_exp_direc = os.path.join(tb_logs_direc, "{}").format(unique_token)
         logger.setup_tb(tb_exp_direc)
 
