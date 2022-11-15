@@ -341,7 +341,8 @@ class CloudpickleWrapper():
         return cloudpickle.dumps(self.x)
 
     def __setstate__(self, ob):
-        import pickle5 as pickle
+        # import pickle5 as pickle
+        import pickle
         print(pickle.DEFAULT_PROTOCOL)
         self.x = pickle.loads(ob)
 
