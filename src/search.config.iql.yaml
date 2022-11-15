@@ -2,7 +2,7 @@ exclude: null
 grid-search:
 
   "--config":
-    - "qmix_lbf_coop"
+    - "iql_lbf_coop"
 
   hidden_dim:
     - 128
@@ -16,6 +16,7 @@ grid-search:
   standardise_rewards:
     - True
     - False
+
 # network type
   use_rnn:
     - True
@@ -50,5 +51,5 @@ grid-search:
 grid-search-groups:
   env0:
     - "--env-config": "gymcoop"
-    - env_args.key: 'Foraging-10x10-3p-3f-v0'
+    - env_args.key: 'Foraging-8x8-2p-2f-coop-v0'
     - env_args.time_limit: 25

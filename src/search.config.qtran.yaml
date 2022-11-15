@@ -2,7 +2,7 @@ exclude: null
 grid-search:
 
   "--config":
-    - "qmix_lbf_coop"
+    - "qtran"
 
   hidden_dim:
     - 128
@@ -34,6 +34,15 @@ grid-search:
     - 0.01
     - 200
 
+#  entropy_coef:
+#    - 0.01
+#    - 0.001
+#
+#  q_nstep:
+#    - 5
+#    - 10
+
+
   t_max:
     - 2050000
   test_nepisode:
@@ -49,6 +58,6 @@ grid-search:
 
 grid-search-groups:
   env0:
-    - "--env-config": "gymcoop"
-    - env_args.key: 'Foraging-10x10-3p-3f-v0'
+    - "--env-config": "gymma"
+    - env_args.key: 'Foraging-8x8-2p-2f-coop-v0'
     - env_args.time_limit: 25
