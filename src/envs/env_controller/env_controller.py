@@ -86,6 +86,7 @@ class NSSimulation(socketio.AsyncClientNamespace):
 
     async def on_pre_transition_data(self, data):
         print(data)
+
     # async def on_disconnect(self):
     #   print('disconnected from simulation')
 
