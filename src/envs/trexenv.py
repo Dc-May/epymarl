@@ -12,61 +12,107 @@ class TrexEnv(MultiAgentEnv):
     """
     def __init__(self, **kwargs):
         self.terminated = False
-
+        self.n_agents = 0
         #TODO: this is the code for making the runnner and getting the parameters of the sim
         # self.config_name = kwargs['trex_config'] -> this should be passable through cli env_args
-        self.config_name = 'CLI_agent_testig'
-        TREX_path = 'C:/source/TREX-Core/TREX_Core/'
+        # self.config_name = 'CLI_agent_testig'
+        self.config_name = kwargs['TREX_config']
+
+        # FIXME: this hardcode that is here needs to be remedied, probably in the config in epymarl EPYMARL or in the env.args
+        # TREX_path = 'C:/source/TREX-Core/TREX_Core/'
+        TREX_path = kwargs['TREX_path']
         self.runner = TREX_Core._utils.runner.Runner(self.config_name, resume=False, purge=False, path=TREX_path)
         self.config = self.runner.configs
 
-        mem_lists = self.setup_interprocess_memory()
+        # get the n agents from the config:
+        for ident in self.config['participants']:
+            if self.config['participants'][ident]['trader']['type'] == 'gym_agent':
+                self.n_agents = self.n_agents + 1
 
+        # setup the memory lists
+        self.setup_spaces()
+        self.mem_lists = self.setup_interprocess_memory()
 
-        self.launch_TREX() #FIXME: August 16 2022, this is where TREX is launched, no where else.
+        # #########################################################################
+        # catch if there are no gym traders. This
+        if not self.n_agents:
+            self.n_agents = 0
 
-
-
-        if kwargs['using_batteries']:
-            self.using_batteries = True
-        else:
-            self.using_batteries = False  # Todo: Jan 24, 2022: this needs to be able to be set based on the trex config in main
-
-        if kwargs['n_agents']:
-            self.n_agents = kwargs['n_agents']
-        else:
-            self.n_agents = 0  # Todo: Jan 24, 2022: this needs to be able to be set based on the trex config in main
-
-        self.episode_limit = 0  # Todo Jan 24, 2022: this needs to be able to be set based on generation length in trex config
-
-        #Items pulled from the trexGymEnv(gym.Env) class
-        # self.action_space = tuple()
-        self.action_space = spaces.Tuple(tuple([spaces.Box(low=np.array([0.07, -17.0, 0.0]),
-                                                           high=np.array([0.0, 17, 100.0]))] * self.n_agents))
-        # self.observation_space = tuple()
-        self.observation_space = spaces.Tuple(tuple([spaces.Box(low=0.0, high=1.0, shape=(5,))] * self.n_agents))
+        '''
+        TODO: November 19 2022
+        Calculation here is in seconds because steven made it so.
+        Number of seconds in a day: 86400
+        number of days in sim can be pulled from cofig 
+        timestep size in seconds is also in config 
+        episode limit = 86400 * days / time_step_size 
+        EPISODE LIMIT IS AN INTEGER -- No weird half timesteps 
+        '''
+        self.episode_limit = int(86400 * self.config['study']['days'] / self.config['study']['time_step_size'])
         self._seed = 0
 
-    def setup_interprocess_memory(self):
-        from multiprocessing import shared_memory
+        ####### TREX GETS LAUNCHED HERE #########
+        # self.launch_TREX() #FIXME: August 16 2022, this is where TREX is launched, no where else.
+
+    def setup_spaces(self):
+        '''
+        This method sets up the action and observation spaces based on the values that are in the config
+        For now, agents are assumed to be homogenous in the
+        '''
+
+        # Bring up the values in the config
+
         for ident in self.config['participants']:
-            print(ident)
-            print()
+            if self.config['participants'][ident]['trader']['type'] == 'gym_agent':
+                try:
+                    obs = self.config['participants'][ident]['trader']['observations']
+                except:
+                    obs_len = 5
+
+
+                try:
+                    actions = self.config['participants'][ident]['trader']['actions']
+                except:
+                    actions_len = 7
+
+        # FIXME: November 22 2022; this works but still needs to be further defined in the trex config
+
+        self.action_space = spaces.Tuple(tuple([spaces.Box(low=np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
+                                                           high=np.array([np.inf, np.inf, np.inf, np.inf, np.inf,
+                                                                          np.inf]))] * self.n_agents))
+        self.observation_space = spaces.Tuple(tuple([spaces.Box(low=0.0, high=np.inf, shape=(5,))] * self.n_agents))
+
+    def setup_interprocess_memory(self):
+        """
+        This method sets up the interprocess Shareable lists in memory for all the agents that have the
+        designation gym_agent.
+        Takes in nothing
+        Returns: Dictionary {agent_identification_from_config : { obs_list :obs_list_object, action_list :action_list_object
+        """
+        from multiprocessing import shared_memory
+        agent_dict = {}
+        for ident in self.config['participants']:
             if self.config['participants'][ident]['trader']['type'] == 'gym_agent':
                 # this is where we set up the shared memory object, each agent needs 2 objects actions, observations
+                # todo: November 21 2022; for parallel runner there will need to be extra identifiers for sharelists to remain unique
                 actions_name = ident+'_actions'
                 obs_name = ident+'_obs'
-                # actions [flag,
-                actions_list = shared_memory.ShareableList([0.0,0.0,0.0,0.0], name=actions_name)
-                obs_list = shared_memory.ShareableList([0.0,0.0,0.0,0.0], name= obs_name)
 
-
-
-
-        agent_dict = {}
+                # TODO: November 19, 2022: see if you can put objects into here like full gym spaces, or at least
+                # Flattened gym spaces. Actions are like this:
+                # [bid price, bid quantity, solar ask price, solar ask quantity, bess ask price, bess ask quantity]
+                #TODO: Novemeber 22, 2022: these two should be created from the lenght of actionspaces and observation spaces.
+                actions_list = shared_memory.ShareableList([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], name=actions_name)
+                obs_list = shared_memory.ShareableList([0.0, 0.0, 0.0, 0.0], name=obs_name)
+                agent_dict[ident] = {
+                    'obs':  obs_list,
+                    'actions': actions_list
+                }
         return agent_dict
 
     def run_subprocess(self, args: list, delay=0):
+        """
+        This method runs the venv interpreter
+        """
         import subprocess
         import time
 
@@ -78,9 +124,6 @@ class TrexEnv(MultiAgentEnv):
         except:
             print('Excepting: using the atpetepymarl python')
             subprocess.run(['C:/Users/molly/.virtualenvs/atpeterpymarl-qnIKOvrx/Scripts/python', args[0], *args[1]])
-
-
-
 
     def launch_TREX(self):
         """
@@ -143,15 +186,21 @@ class TrexEnv(MultiAgentEnv):
         print("State size ", state_size)
         return state_size
 
-    def get_obs(self, timestep):
+    def get_obs(self):
 
         """
         This gets the full observation state for that timestep
-        #TODO: As of August 16 2022, this is not implemented
-        :return:
+
+        :return: a single list that contains all the agents individual observations as lists:
+        [agent1_obs_list, agent2_obs_list, ..., agentn_obs_list
+
         """
-        raise NotImplementedError
-        return 0
+
+        # in the lbf this simply returns self._obs
+        # self._obs is populated in env.step, but the values are pulled before the next
+        # steps
+
+        return
 
     def get_obs_agent(self, agent_id):
         '''
@@ -166,11 +215,8 @@ class TrexEnv(MultiAgentEnv):
         THIS METHOD IS REQUIRED FOR GYM
         This method returns the size of each individual agents observation space.
         """
-        if self.using_batteries:
-            obs_size = 5
-        else:
-            obs_size = 3
-
+        from gym.spaces import flatdim
+        obs_size = flatdim(self.observation_space[-1])
 
         return obs_size
 
@@ -180,12 +226,13 @@ class TrexEnv(MultiAgentEnv):
         Returns the total number of actions that an agent could ever take:
         :return:
         """
-        if self.using_batteries:
-            tot_actions = 3
-        else:
-            tot_actions = 2
-
-        return tot_actions
+        # if self.using_batteries:
+        #     tot_actions = 3
+        # else:
+        #     tot_actions = 2
+        from gym.spaces import flatdim
+        action_size = flatdim(self.action_space[-1])
+        return action_size
 
     def render(self, mode="human"):
         '''
@@ -195,16 +242,34 @@ class TrexEnv(MultiAgentEnv):
 
     def step(self, actions):
         '''
-        #TODO: August 16 2022, as of this moment this is still just pseudocode.
+        TODO: November 21 2022; this needs to be implemented and needs to give the right values
+        [bid price, bid quantity, solar ask price, solar ask quantity, bess ask price, bess ask quantity]
         '''
+
+        # SEND ACTIONS
+        #actions are provided, so this method needs to put the actions into the
+        # actions are tensor (n_actions, n_agent)
+        # Trex will have price, quantity,
+        for i, agent in enumerate(self.mem_lists):
+            agent_action = actions[i]
+            # insert the agents actions into the memlist
+            self.mem_lists[agent]['actions'] = actions[i]
+
+        ## TODO: read the observation from all the agents and put it into the self._obs array:
+
+        self.read_obs_values()
+
         # terminated:
         # this will need to be able to get set on the end of each generation
-        terminated = self.envController.terminated()
+        terminated = []
 
         # Reward:
-        # To get the reward I will have to get the matched reward, same way that steven gets it in the current way of
-        # training Deep neural networks This can be found in stevens repo under bess test branch in agent.learn()
-        reward = self.envController.get_reward()
+        # Rewards are going to have to be sent over from the gym trader, which will be able to
+        # get information from the reward
+
+        # TODO: calculate reward 
+
+        reward = []
 
         # info:
         # Imma keep it as a open dictionary for now:
@@ -212,16 +277,49 @@ class TrexEnv(MultiAgentEnv):
 
         return float(reward), all(terminated), info
 
+    def read_obs_values(self):
+        """
+        This method cycles through the mem lists of the agents until they all have all read the information.
+        """
+
+        self._obs = []
+
+
+
     def reset(self):
         '''
         This method resets the trex environment.
-        TODO:  figure out what this needs to do
+        The reset would have to be able to kill all the TREX processes,
+        then reboot them all and have the gym traders reconnect to the shared memory objects.
+        TODO: Nov 18 2022: this needs to return the expected values
         '''
+
         return None
 
     def get_state(self):
         '''
         This method gets called for the pretransition data; this is the state data from the envcontroller
+        This method will return a flattened version of all the agents observations.
+
+
         '''
-        state = None
+
+        # get all the remote agent values and then put them into a list
+
+
+        state = []
+
+
         return state
+
+    def get_avail_actions(self):
+        """
+        This method will return a list of list that gives the availiable actions
+
+
+        """
+        # For now, all actions are availiable at all time
+        ACTIONS = [1]*self.action_space[-1].shape[0]
+        avail_actions = [ACTIONS *self.n_agents]
+
+        return avail_actions
