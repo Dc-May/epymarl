@@ -13,15 +13,16 @@ class TrexEnv(MultiAgentEnv):
     def __init__(self, **kwargs):
         self.terminated = False
         self.n_agents = 0
-        #TODO: this is the code for making the runnner and getting the parameters of the sim
-        # self.config_name = kwargs['trex_config'] -> this should be passable through cli env_args
-        # self.config_name = 'CLI_agent_testig'
-        self.config_name = kwargs['TREX_config']
 
-        # FIXME: this hardcode that is here needs to be remedied, probably in the config in epymarl EPYMARL or in the env.args
-        # TREX_path = 'C:/source/TREX-Core/TREX_Core/'
+        self.config_name = kwargs['TREX_config']
         TREX_path = kwargs['TREX_path']
+
+        # changes where python is looking to open the right config
+        cur_dir = os.getcwd()
+        os.chdir(TREX_path)
         self.runner = TREX_Core._utils.runner.Runner(self.config_name, resume=False, purge=False, path=TREX_path)
+        os.chdir(cur_dir)
+
         self.config = self.runner.configs
 
         # get the n agents from the config:
@@ -34,7 +35,7 @@ class TrexEnv(MultiAgentEnv):
         self.mem_lists = self.setup_interprocess_memory()
 
         # #########################################################################
-        # catch if there are no gym traders. This
+        # catch if there are no gym traders. This is probably not needed.
         if not self.n_agents:
             self.n_agents = 0
 
@@ -51,7 +52,7 @@ class TrexEnv(MultiAgentEnv):
         self._seed = 0
 
         ####### TREX GETS LAUNCHED HERE #########
-        # self.launch_TREX() #FIXME: August 16 2022, this is where TREX is launched, no where else.
+        # self.launch_TREX()
 
     def setup_spaces(self):
         '''
@@ -267,7 +268,7 @@ class TrexEnv(MultiAgentEnv):
         # Rewards are going to have to be sent over from the gym trader, which will be able to
         # get information from the reward
 
-        # TODO: calculate reward 
+        # TODO: calculate reward
 
         reward = []
 
