@@ -13,6 +13,7 @@ class TrexEnv(MultiAgentEnv):
     def __init__(self, **kwargs):
         self.terminated = False
         self.n_agents = 0
+        self._obs = []
 
         self.config_name = kwargs['TREX_config']
         TREX_path = kwargs['TREX_path']
@@ -68,8 +69,6 @@ class TrexEnv(MultiAgentEnv):
                     obs = self.config['participants'][ident]['trader']['observations']
                 except:
                     obs_len = 5
-
-
                 try:
                     actions = self.config['participants'][ident]['trader']['actions']
                 except:
@@ -97,16 +96,21 @@ class TrexEnv(MultiAgentEnv):
                 # todo: November 21 2022; for parallel runner there will need to be extra identifiers for sharelists to remain unique
                 actions_name = ident+'_actions'
                 obs_name = ident+'_obs'
+                reward_name = ident+'_reward'
 
-                # TODO: November 19, 2022: see if you can put objects into here like full gym spaces, or at least
                 # Flattened gym spaces. Actions are like this:
                 # [bid price, bid quantity, solar ask price, solar ask quantity, bess ask price, bess ask quantity]
-                #TODO: Novemeber 22, 2022: these two should be created from the lenght of actionspaces and observation spaces.
+                #TODO: Novemeber 22, 2022: these two should be created from the lenght of actionspaces and observation
+                #  and reward spaces.
                 actions_list = shared_memory.ShareableList([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], name=actions_name)
                 obs_list = shared_memory.ShareableList([0.0, 0.0, 0.0, 0.0], name=obs_name)
+                reward_list = shared_memory.ShareableList([0.0, 0.0], name=reward_name)
+S
+
                 agent_dict[ident] = {
                     'obs':  obs_list,
-                    'actions': actions_list
+                    'actions': actions_list,
+                    'rewards' : reward_list
                 }
         return agent_dict
 
@@ -122,6 +126,7 @@ class TrexEnv(MultiAgentEnv):
         try:
             print('Trying to find the venv python worked')
             subprocess.run(['venv/Scripts/python', args[0], *args[1]]) #FIXME: August 29 2022,  this is coded for postix system
+            #subproces.run([sys.executable, args[0], *args[1]]) This is probably the most
         except:
             print('Excepting: using the atpetepymarl python')
             subprocess.run(['C:/Users/molly/.virtualenvs/atpeterpymarl-qnIKOvrx/Scripts/python', args[0], *args[1]])
@@ -243,13 +248,12 @@ class TrexEnv(MultiAgentEnv):
 
     def step(self, actions):
         '''
-        TODO: November 21 2022; this needs to be implemented and needs to give the right values
         [bid price, bid quantity, solar ask price, solar ask quantity, bess ask price, bess ask quantity]
         '''
 
         # SEND ACTIONS
-        #actions are provided, so this method needs to put the actions into the
-        # actions are tensor (n_actions, n_agent)
+        #actions are provided, so this method needs to put the actions into the right action bufferes
+        # actions are tensor (n_actions x n_agent)
         # Trex will have price, quantity,
         for i, agent in enumerate(self.mem_lists):
             agent_action = actions[i]
@@ -268,8 +272,8 @@ class TrexEnv(MultiAgentEnv):
         # Rewards are going to have to be sent over from the gym trader, which will be able to
         # get information from the reward
 
-        # TODO: calculate reward
-
+        # TODO: get the reward from wherever I put the reward
+        self.read_reward_values()
         reward = []
 
         # info:
@@ -285,6 +289,15 @@ class TrexEnv(MultiAgentEnv):
 
         self._obs = []
 
+    def read_reward_values(self):
+        """
+        This method cycles through the reward mem lists of the agents until they all have read the information.
+        """
+        # encode the agents as one hot vectors:
+        agent_status = [0] * self.n_agents
+
+
+        self._reward = []
 
 
     def reset(self):
