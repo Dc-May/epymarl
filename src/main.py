@@ -1,5 +1,4 @@
 import sys
-print('atpeterepymarl main.py executable', sys.prefix)
 import numpy as np
 import os
 import random
@@ -90,7 +89,7 @@ if __name__ == '__main__':
     # Get the defaults from default.yaml
     with open(os.path.join(os.path.dirname(__file__), "config", "default.yaml"), "r") as f:
         try:
-            config_dict = yaml.load(f)
+            config_dict = yaml.safe_load(f)
         except yaml.YAMLError as exc:
             assert False, "default.yaml error: {}".format(exc)
 
@@ -131,7 +130,7 @@ if __name__ == '__main__':
     # ssl_cert_reqs=ssl.CERT_NONE
     # )
     # ex.observers.append(QueuedMongoObserver(db_name="ipppo_wtf_test", client=client, collection_prefix=config_dict['name'] + date_time)) #url='172.31.5.187:27017'))
-    ex.observers.append(FileStorageObserver.create("./results/testing_hyperparameter_search"))
+    ex.observers.append(FileStorageObserver.create("./results/trex_tests"))
     # ex.observers.append(MongoObserver())
     
     ex.run_commandline(params)
