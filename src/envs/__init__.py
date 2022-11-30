@@ -118,6 +118,8 @@ class _GymmaWrapper(MultiAgentEnv):
         """ Returns reward, terminated, info """
         actions = [int(a) for a in actions]
         self._obs, reward, done, info = self._env.step(actions)
+        # This pads the observations of all agents to be the same size as the longest observation space,
+        # this way the observation spaces are all the same size all the time.
         self._obs = [
             np.pad(
                 o,
