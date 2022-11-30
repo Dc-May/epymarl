@@ -105,7 +105,7 @@ class TrexEnv(MultiAgentEnv):
                 actions_list = shared_memory.ShareableList([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], name=actions_name)
                 obs_list = shared_memory.ShareableList([0.0, 0.0, 0.0, 0.0], name=obs_name)
                 reward_list = shared_memory.ShareableList([0.0, 0.0], name=reward_name)
-S
+
 
                 agent_dict[ident] = {
                     'obs':  obs_list,
