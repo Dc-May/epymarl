@@ -1,3 +1,5 @@
+import sys
+
 import gym
 from envs.multiagentenv import MultiAgentEnv
 from gym import error, spaces
@@ -14,7 +16,8 @@ class TrexEnv(MultiAgentEnv):
         self.terminated = False
         self.n_agents = 0
         self._obs = []
-
+        self.action_array = [] # this is the array for the actions in the order that they are processed
+        self.obs_array = []
         self.config_name = kwargs['TREX_config']
         TREX_path = kwargs['TREX_path']
 
@@ -53,7 +56,7 @@ class TrexEnv(MultiAgentEnv):
         self._seed = 0
 
         ####### TREX GETS LAUNCHED HERE #########
-        # self.launch_TREX()
+        self.launch_TREX()
 
     def setup_spaces(self):
         '''
@@ -61,25 +64,29 @@ class TrexEnv(MultiAgentEnv):
         For now, agents are assumed to be homogenous in the
         '''
 
-        # Bring up the values in the config
-
         for ident in self.config['participants']:
             if self.config['participants'][ident]['trader']['type'] == 'gym_agent':
                 try:
-                    obs = self.config['participants'][ident]['trader']['observations']
+                    self.obs_array = self.config['participants'][ident]['trader']['observations']
+                    obs_len = len(self.obs_array)
+                    obs_space = spaces.Box(low=-np.inf, high=np.inf, shape=(obs_len,))
                 except:
-                    obs_len = 5
+                    print('There was a problem loading the config observations')
                 try:
                     actions = self.config['participants'][ident]['trader']['actions']
+                    for action in actions:
+                        if actions[action] == 'learned':
+                            self.action_array.append(action)
+
+                    action_len = len(self.action_array)
+                    action_space = spaces.Box(low=-np.inf, high=np.inf, shape=(action_len,))
                 except:
-                    actions_len = 7
+                    print("there was a problem loading the actions")
 
         # FIXME: November 22 2022; this works but still needs to be further defined in the trex config
 
-        self.action_space = spaces.Tuple(tuple([spaces.Box(low=np.array([0.0, 0.0, 0.0, 0.0, 0.0, 0.0]),
-                                                           high=np.array([np.inf, np.inf, np.inf, np.inf, np.inf,
-                                                                          np.inf]))] * self.n_agents))
-        self.observation_space = spaces.Tuple(tuple([spaces.Box(low=0.0, high=np.inf, shape=(5,))] * self.n_agents))
+        self.action_space = spaces.Tuple(tuple([action_space] * self.n_agents))
+        self.observation_space = spaces.Tuple(tuple([obs_space] * self.n_agents))
 
     def setup_interprocess_memory(self):
         """
@@ -100,17 +107,22 @@ class TrexEnv(MultiAgentEnv):
 
                 # Flattened gym spaces. Actions are like this:
                 # [bid price, bid quantity, solar ask price, solar ask quantity, bess ask price, bess ask quantity]
-                #TODO: Novemeber 22, 2022: these two should be created from the lenght of actionspaces and observation
-                #  and reward spaces.
-                actions_list = shared_memory.ShareableList([0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0], name=actions_name)
-                obs_list = shared_memory.ShareableList([0.0, 0.0, 0.0, 0.0], name=obs_name)
+                #TODO: Novemeber 22, 2022: these two should be created from the length of action spaces and observation
+                #  and reward spaces. need to find out if observations and actions will ever be more than one value
+                length_of_obs = len(self.obs_array) + 1
+                length_of_actions = len(self.action_array) + 1
+
+                observations = [0.0] * length_of_obs
+
+                actions_list = shared_memory.ShareableList([0.0]*length_of_actions, name=actions_name)
+                obs_list = shared_memory.ShareableList([0.0]*length_of_obs, name=obs_name)
                 reward_list = shared_memory.ShareableList([0.0, 0.0], name=reward_name)
 
 
                 agent_dict[ident] = {
                     'obs':  obs_list,
                     'actions': actions_list,
-                    'rewards' : reward_list
+                    'rewards': reward_list
                 }
         return agent_dict
 
@@ -119,13 +131,10 @@ class TrexEnv(MultiAgentEnv):
         This method runs the venv interpreter
         """
         import subprocess
-        import time
 
-        time.sleep(delay)
-        print("the trex args", args)
         try:
             print('Trying to find the venv python worked')
-            subprocess.run(['venv/Scripts/python', args[0], *args[1]]) #FIXME: August 29 2022,  this is coded for postix system
+            subprocess.run([sys.executable, args[0], *args[1]]) #FIXME: August 29 2022,  this is coded for postix system
             #subproces.run([sys.executable, args[0], *args[1]]) This is probably the most
         except:
             print('Excepting: using the atpetepymarl python')
@@ -142,42 +151,15 @@ class TrexEnv(MultiAgentEnv):
             # {'simulation_type': 'training'}
             # {'simulation_type': 'validation'}
         # ]
-        # runner = TREX_Core._utils.runner.Runner("TB8", resume=False, purge=False)
-        # launch_list = runner.run(simulations, run=False) #running with run=False just creates a launch list
 
-        # path_to_env_client = os.getcwd() + '/envs/env_controller/sio_client.py'
-
-        # FIXME: March 8 2022, hardcode below. Plz fix market id
-        # args_list = ['--port=3500', '--market_id=training']
-        # launch_list.append((path_to_env_client, args_list))
-        # launch_list = self.create_trex_launchlist()
         launch_list = self.runner.make_launch_list(self.runner.configs)
         #launch the TREX launchlist from inside EPYMARL
         from multiprocessing import Pool
         pool_size = len(launch_list)
         pool = Pool(pool_size)
-        pool.map(self.run_subprocess, launch_list) #FIXME: July 2022: this map seems to be giving me a error to do with the launch list.
+        pool.map(self.run_subprocess, launch_list)
         pool.close()
 
-    def create_trex_launchlist(self,
-                               config_name='TB8',
-                               simulations=[{'simulation_type': 'training'}],
-                               port=3500):
-        """
-        This function creates the lanchlist
-        I should be able to specify the config name and simulations from the command line for hyperparameter search
-        TODO:  I should probably be able to specify the port from the command line for hyperparameter search
-        """
-        runner = TREX_Core._utils.runner.Runner(config_name, resume=False, purge=False)
-        # launch_list = runner.run(simulations, run=False)
-        launch_list = runner.make_launch_list(runner.configs)
-
-        # need to add the env controller here
-        path_to_envcontroller_sioclient = os.getcwd() + '/envs/env_controller/sio_client.py'
-        args_list = ['--port='+str(port), '--market_id=training']
-        launch_list.append((path_to_envcontroller_sioclient, args_list))
-
-        return launch_list
 
 
     def get_state_size(self):
@@ -260,13 +242,9 @@ class TrexEnv(MultiAgentEnv):
             # insert the agents actions into the memlist
             self.mem_lists[agent]['actions'] = actions[i]
 
-        ## TODO: read the observation from all the agents and put it into the self._obs array:
-
-        self.read_obs_values()
-
         # terminated:
         # this will need to be able to get set on the end of each generation
-        terminated = []
+        terminated = [0.0]*self.n_agents
 
         # Reward:
         # Rewards are going to have to be sent over from the gym trader, which will be able to
@@ -286,8 +264,20 @@ class TrexEnv(MultiAgentEnv):
         """
         This method cycles through the mem lists of the agents until they all have all read the information.
         """
-
+        agent_status = [0] * self.n_agents
         self._obs = []
+        while True:
+            # main loop; keep checking agent_status is
+            if all(agent_status):
+                # all agents have submitted rewards, break out of the loop
+                break
+            # loop through all the agents reward buffers and check their flags
+            for i, ident in self.mem_lists:
+                # agent is a dictionary 'obs', 'actions', 'rewards'
+                if self.mem_lists[ident]['obs'][0]:
+                    # rewards are good to read
+                    self._obs[i] = self.mem_lists[ident]['obs'][1:]  # this is hardcoded because rewards
+                    agent_status[i] = 1
 
     def read_reward_values(self):
         """
@@ -295,9 +285,19 @@ class TrexEnv(MultiAgentEnv):
         """
         # encode the agents as one hot vectors:
         agent_status = [0] * self.n_agents
-
-
         self._reward = []
+        while True:
+            # main loop; keep checking agent_status is
+            if all(agent_status):
+                #all agents have submitted rewards, break out of the loop
+                break
+            #loop through all the agents reward buffers and check their flags
+            for i, ident in self.mem_lists:
+                # agent is a dictionary 'obs', 'actions', 'rewards'
+                if self.mem_lists[ident]['rewards'][0]:
+                    # rewards are good to read
+                    self._reward[i] = self.mem_lists[ident]['rewards'][1:]# this is hardcoded because rewards
+                    agent_status[i] = 1
 
 
     def reset(self):
@@ -305,7 +305,7 @@ class TrexEnv(MultiAgentEnv):
         This method resets the trex environment.
         The reset would have to be able to kill all the TREX processes,
         then reboot them all and have the gym traders reconnect to the shared memory objects.
-        TODO: Nov 18 2022: this needs to return the expected values
+        TODO Peter: November 30, 2022; This is going to need to reset the TREX instance
         '''
 
         return None
@@ -315,21 +315,20 @@ class TrexEnv(MultiAgentEnv):
         This method gets called for the pretransition data; this is the state data from the envcontroller
         This method will return a flattened version of all the agents observations.
 
-
+        Return: State -> list ; size [individual agent obs] * n_agents
         '''
 
         # get all the remote agent values and then put them into a list
-
-
+        # TODO: December 02, test this functionality
         state = []
-
-
+        self.read_obs_values()
+        state = np.concatenate(self._obs).tolist()
         return state
 
     def get_avail_actions(self):
         """
-        This method will return a list of list that gives the availiable actions
-
+        This method will return a list of list that gives the available actions
+        return: avail_actions -> list of [1]* n_agents
 
         """
         # For now, all actions are availiable at all time
