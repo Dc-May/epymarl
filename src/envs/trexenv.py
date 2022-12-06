@@ -146,13 +146,16 @@ class TrexEnv(MultiAgentEnv):
         :return:
         """
 
-        # simulations = [
+        simulations = [
             # {'simulation_type': 'baseline'},
-            # {'simulation_type': 'training'}
+            {'simulation_type': 'training'}
             # {'simulation_type': 'validation'}
-        # ]
+        ]
 
-        launch_list = self.runner.make_launch_list(self.runner.configs)
+        # need to modify the config that is here with the sim type:
+        confog = self.runner.modify_config(simulation_type='training')
+
+        launch_list = self.runner.make_launch_list(confog)
         #launch the TREX launchlist from inside EPYMARL
         from multiprocessing import Pool
         pool_size = len(launch_list)
