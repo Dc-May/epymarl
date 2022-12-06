@@ -8,6 +8,13 @@ from .maddpg_learner_coop import MADDPGCoopLearner
 from .ppo_learner import PPOLearner
 from .ppo_coop_learner import PPOCoopLearner
 from .actor_critic_coop_learner import ActorCriticCoopLearner
+
+##### imports from the QTRAN code base
+from .qtran_learner import QLearner as QTranLearner
+#### imports from the QPLEX code base
+from .qtran_learner import QLearner as QTranLearner
+from .dmaq_qatten_learner import DMAQ_qattenLearner
+
 REGISTRY = {}
 
 REGISTRY["q_learner"] = QLearner
@@ -20,3 +27,7 @@ REGISTRY["maddpg_learner"] = MADDPGLearner
 REGISTRY["ppo_learner"] = PPOLearner
 REGISTRY["maddpg_coop_learner"] = MADDPGCoopLearner
 REGISTRY["ppo_coop_learner"] = PPOCoopLearner
+
+REGISTRY["qtran_learner"] = QTranLearner
+REGISTRY["dmaq_qatten_learner"] = DMAQ_qattenLearner
+
