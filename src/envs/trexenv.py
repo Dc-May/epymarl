@@ -124,6 +124,7 @@ class TrexEnv(MultiAgentEnv):
                     'actions': actions_list,
                     'rewards': reward_list
                 }
+                self.agent_names = list(agent_dict.keys())
         return agent_dict
 
     def run_subprocess(self, args: list, delay=0):

@@ -43,3 +43,6 @@ dataset
 sqlalchemy
 sqlalchemy_utils
 importlib-metadata==4.0
+joblib
+click
+pymongo
