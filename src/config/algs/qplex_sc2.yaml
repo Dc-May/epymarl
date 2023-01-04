@@ -5,6 +5,7 @@ action_selector: "epsilon_greedy"
 epsilon_start: 1.0
 epsilon_finish: 0.05
 epsilon_anneal_time: 50000
+evaluation_epsilon: 0.0
 
 runner: "episode"
 
@@ -13,6 +14,7 @@ buffer_size: 5000
 # update the target network every {} episodes
 target_update_interval: 200
 
+use_rnn: True
 # use the Q_Learner to train
 agent_output_type: "q"
 learner: "dmaq_qatten_learner"
@@ -20,10 +22,8 @@ double_q: True
 mixer: "dmaq"
 mixing_embed_dim: 32
 hypernet_embed: 64
-adv_hypernet_layers: 3 # number of layers in middle layers
-adv_hypernet_embed: 64 # unit number in middle layers
-use_rnn: True
-evaluation_epsilon: 0.0
+adv_hypernet_layers: 1
+adv_hypernet_embed: 64
 
 num_kernel: 4
 is_minus_one: True
@@ -31,10 +31,6 @@ weighted_head: True
 is_adv_attention: True
 is_stop_gradient: True
 
-n_heads: 4
-attend_reg_coef: 0.001
+burn_in_period: 100
 
-
-
-
-name: "qplex"
+name: "qplex_sc2"
