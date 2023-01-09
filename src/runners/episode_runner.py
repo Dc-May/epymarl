@@ -78,11 +78,12 @@ class EpisodeRunner:
         self.mac.init_hidden(batch_size=self.batch_size)
 
         while not terminated:
-
+            state = [self.env.get_state()]
+            obs = [self.env.get_obs()]
             pre_transition_data = {
-                "state": [self.env.get_state()],
+                "state": obs, #[self.env.get_state()], #ToDo: Peter, Jan6th 2023 check if this can be unhacked
                 "avail_actions": [self.env.get_avail_actions()],
-                "obs": [self.env.get_obs()]
+                "obs": obs
             }
 
             self.batch.update(pre_transition_data, ts=self.t)
@@ -101,8 +102,8 @@ class EpisodeRunner:
             episode_return += math.fsum(reward)
             # episode_return += reward
             # TODO: works 
-            for i, value in enumerate(env_info['agent_rewards']): 
-                    current_episode_agent_returns[i] += value
+            # for i, value in enumerate(env_info['agent_rewards']):
+            #         current_episode_agent_returns[i] += value
             post_transition_data = {
                 "actions": actions,
                 "reward": [(reward,)],
@@ -136,7 +137,7 @@ class EpisodeRunner:
         # this is where I can append current_episode_agent_returns
         # TODO: works
         self.agent_returns.append(current_episode_agent_returns)
-        env_info.pop('agent_rewards')
+        # env_info.pop('agent_rewards')
 
 
         cur_stats.update({k: cur_stats.get(k, 0) + env_info.get(k, 0) for k in set(cur_stats) | set(env_info)})

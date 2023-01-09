@@ -56,7 +56,7 @@ class TrexEnv(MultiAgentEnv):
         self._seed = 0
 
         ####### TREX GETS LAUNCHED HERE #########
-        self.launch_TREX()
+        # self.launch_TREX()
 
     def setup_spaces(self):
         '''
@@ -75,7 +75,7 @@ class TrexEnv(MultiAgentEnv):
                 try:
                     actions = self.config['participants'][ident]['trader']['actions']
                     for action in actions:
-                        if actions[action] == 'learned':
+                        if actions[action]['heuristic'] == 'learned':
                             self.action_array.append(action)
 
                     action_len = len(self.action_array)
@@ -107,8 +107,6 @@ class TrexEnv(MultiAgentEnv):
 
                 # Flattened gym spaces. Actions are like this:
                 # [bid price, bid quantity, solar ask price, solar ask quantity, bess ask price, bess ask quantity]
-                #TODO: Novemeber 22, 2022: these two should be created from the length of action spaces and observation
-                #  and reward spaces. need to find out if observations and actions will ever be more than one value
                 length_of_obs = len(self.obs_array) + 1
                 length_of_actions = len(self.action_array) + 1
 
@@ -192,7 +190,7 @@ class TrexEnv(MultiAgentEnv):
         # self._obs is populated in env.step, but the values are pulled before the next
         # steps
 
-        return
+        return self._obs
 
     def get_obs_agent(self, agent_id):
         '''
@@ -241,10 +239,14 @@ class TrexEnv(MultiAgentEnv):
         #actions are provided, so this method needs to put the actions into the right action bufferes
         # actions are tensor (n_actions x n_agent)
         # Trex will have price, quantity,
+        print('In Trexenv Step')
         for i, agent in enumerate(self.mem_lists):
             agent_action = actions[i]
             # insert the agents actions into the memlist
-            self.mem_lists[agent]['actions'] = actions[i]
+            self.mem_lists[agent]['actions'][1] = agent_action.item()
+            self.write_flag(self.mem_lists[agent]['actions'], True)
+        # this is where we would need to set the flag
+
 
         # terminated:
         # this will need to be able to get set on the end of each generation
@@ -256,13 +258,13 @@ class TrexEnv(MultiAgentEnv):
 
         # TODO: get the reward from wherever I put the reward
         self.read_reward_values()
-        reward = []
+        reward = [float(reward) for reward in self._reward]
 
         # info:
         # Imma keep it as a open dictionary for now:
         info = {}
 
-        return float(reward), all(terminated), info
+        return reward, all(terminated), info
 
     def read_obs_values(self):
         """
@@ -270,18 +272,40 @@ class TrexEnv(MultiAgentEnv):
         """
         agent_status = [0] * self.n_agents
         self._obs = []
-        while True:
+        flag = False
+        while not flag:
             # main loop; keep checking agent_status is
             if all(agent_status):
-                # all agents have submitted rewards, break out of the loop
-                break
+                flag = True
             # loop through all the agents reward buffers and check their flags
-            for i, ident in self.mem_lists:
-                # agent is a dictionary 'obs', 'actions', 'rewards'
-                if self.mem_lists[ident]['obs'][0]:
-                    # rewards are good to read
-                    self._obs[i] = self.mem_lists[ident]['obs'][1:]  # this is hardcoded because rewards
-                    agent_status[i] = 1
+            else:
+                # print('Memlist before', self.mem_lists)
+                for i, ident in enumerate(self.mem_lists):
+                    # FIXME: Value error: too many values to unpack (expected 2)
+                    # agent is a dictionary 'obs', 'actions', 'rewards'
+                    if self.mem_lists[ident]['obs'][0]:
+                        # rewards are good to read
+                        # self._obs.append( self.mem_lists[ident]['obs'][1:] ) # this is hardcoded because rewards
+                        self._obs.append([self.mem_lists[ident]['obs'][i] for i in range(1,
+                                                                                         len(self.mem_lists[ident]['obs']))])
+                        agent_status[i] = 1
+
+    def write_flag(self, shared_list, flag):
+        """
+        This method sets the flag
+        Parameters:
+            shared_list ->  shared list object to be modified
+            flag -> boolean that indicates write 0 or 1. True sets 1
+        """
+        print(shared_list)
+
+        if flag:
+            shared_list[0] = 1
+            print("Flag was set ")
+            print(shared_list)
+        else:
+            shared_list[0] = 0
+            print("Flag was not set")
 
     def read_reward_values(self):
         """
@@ -290,18 +314,19 @@ class TrexEnv(MultiAgentEnv):
         # encode the agents as one hot vectors:
         agent_status = [0] * self.n_agents
         self._reward = []
-        while True:
+        flag = False
+        while not flag:
             # main loop; keep checking agent_status is
             if all(agent_status):
-                #all agents have submitted rewards, break out of the loop
-                break
+                flag = True
             #loop through all the agents reward buffers and check their flags
-            for i, ident in self.mem_lists:
-                # agent is a dictionary 'obs', 'actions', 'rewards'
-                if self.mem_lists[ident]['rewards'][0]:
-                    # rewards are good to read
-                    self._reward[i] = self.mem_lists[ident]['rewards'][1:]# this is hardcoded because rewards
-                    agent_status[i] = 1
+            else:
+                for i, ident in enumerate(self.mem_lists):
+                    # agent is a dictionary 'obs', 'actions', 'rewards'
+                    if self.mem_lists[ident]['rewards'][0]:
+                        # rewards are good to read
+                        self._reward.append(self.mem_lists[ident]['rewards'][1])
+                        agent_status[i] = 1
 
 
     def reset(self):
