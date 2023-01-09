@@ -8,8 +8,7 @@ from .maddpg_learner_coop import MADDPGCoopLearner
 from .ppo_learner import PPOLearner
 from .ppo_coop_learner import PPOCoopLearner
 from .actor_critic_coop_learner import ActorCriticCoopLearner
-from .facmac_learner import FACMACLearner
-from .facmac_learner_discrete import FACMACDiscreteLearner
+
 
 ##### imports from the QTRAN code base
 from .qtran_learner import QLearner as QTranLearner
@@ -37,5 +36,3 @@ REGISTRY["ppo_coop_learner"] = PPOCoopLearner
 REGISTRY["qtran_learner"] = QTranLearner
 REGISTRY["dmaq_qatten_learner"] = DMAQ_qattenLearner
 
-REGISTRY["facmac_learner"] = FACMACLearner
-REGISTRY["facmac_learner_discrete"] = FACMACDiscreteLearner
