@@ -62,7 +62,7 @@ class EpisodeRunner:
     def reset(self):
         self.batch = self.new_batch()
         self.env.reset()
-        self.t = 0
+        self.t = 0 #ToDo: unhack
 
     def run(self, test_mode=False):
         '''
@@ -87,13 +87,14 @@ class EpisodeRunner:
             }
 
             self.batch.update(pre_transition_data, ts=self.t)
+            print(self.t, self.t_env)
 
             # Pass the entire batch of experiences up till now to the agents
             # Receive the actions for each agent at this timestep in a batch of size 1
             actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
             reward, terminated, env_info = self.env.step(actions[0])
 
-            for agent_name, agent_reward in zip(self.evn.agent_names, reward):
+            for agent_name, agent_reward in zip(self.env.agent_names, reward):
                 wandb.log({agent_name + '_reward': agent_reward})
 
             # TODO: March 14 2022, this appeases the algorithm but still needs to be toggled for the scenario
@@ -113,14 +114,15 @@ class EpisodeRunner:
             self.batch.update(post_transition_data, ts=self.t)
 
             self.t += 1
+        state = [self.env.get_state()]
         obs = [self.env.get_obs()]
         last_data = {
-            "state": [self.env.get_state()],
+            "state": obs,  # [self.env.get_state()], #ToDo: Peter, Jan6th 2023 check if this can be unhacked
             "avail_actions": [self.env.get_avail_actions()],
             "obs": obs
         }
 
-        for agent_name, agent_obs in zip(self.evn.agent_names, obs): #ToDo: check if this autoseparates into invididual obs and disentangle and add proper names by fetching names from trex-env
+        for agent_name, agent_obs in zip(self.env.agent_names, obs): #ToDo: DCM 040123 - check if this autoseparates into invididual obs and disentangle and add proper names by fetching names from trex-env
             for i, value in enumerate(agent_obs):
                 wandb.log({agent_name + '_obs_' + str(i): value})
 
@@ -135,7 +137,6 @@ class EpisodeRunner:
         log_prefix = "test_" if test_mode else ""
 
         # this is where I can append current_episode_agent_returns
-        # TODO: works
         self.agent_returns.append(current_episode_agent_returns)
         # env_info.pop('agent_rewards')
 
@@ -144,8 +145,9 @@ class EpisodeRunner:
         cur_stats["n_episodes"] = 1 + cur_stats.get("n_episodes", 0)
         cur_stats["ep_length"] = self.t + cur_stats.get("ep_length", 0)
 
-        if not test_mode:
-            self.t_env += self.t
+        #ToDo (Daniel, Peter, Jan9th 2023): check if this change is appropriate
+        # if not test_mode:
+        self.t_env += self.t
 
         cur_returns.append(episode_return)
        
@@ -155,7 +157,7 @@ class EpisodeRunner:
             self._log_info(log_prefix)
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
             self._log(cur_returns, cur_stats, log_prefix)
-            #TODO: this is where I will log the histograms:
+            #TODO: DCM 040123 this is where I will log the histograms:
             # if self.args.use_rnn:
             #     self._log_hidden_states(self.mac.hidden_states, self.t_env)
 

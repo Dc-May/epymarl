@@ -28,6 +28,8 @@ class TrexEnv(MultiAgentEnv):
         os.chdir(cur_dir)
 
         self.config = self.runner.configs
+        self.len_run_steps = self.config['study']['days'] * 24 * 60 * 60 / self.config['study']['time_step_size']
+        self.t_env_steps = 0
 
         # get the n agents from the config:
         for ident in self.config['participants']:
@@ -152,9 +154,9 @@ class TrexEnv(MultiAgentEnv):
         ]
 
         # need to modify the config that is here with the sim type:
-        confog = self.runner.modify_config(simulation_type='training')
+        config = self.runner.modify_config(simulation_type='training')
 
-        launch_list = self.runner.make_launch_list(confog)
+        launch_list = self.runner.make_launch_list(config)
         #launch the TREX launchlist from inside EPYMARL
         from multiprocessing import Pool
         pool_size = len(launch_list)
@@ -239,18 +241,21 @@ class TrexEnv(MultiAgentEnv):
         #actions are provided, so this method needs to put the actions into the right action bufferes
         # actions are tensor (n_actions x n_agent)
         # Trex will have price, quantity,
-        print('In Trexenv Step')
+        # print('In Trexenv Step')
         for i, agent in enumerate(self.mem_lists):
             agent_action = actions[i]
             # insert the agents actions into the memlist
             self.mem_lists[agent]['actions'][1] = agent_action.item()
             self.write_flag(self.mem_lists[agent]['actions'], True)
         # this is where we would need to set the flag
-
+        self.t_env_steps += 1
 
         # terminated:
         # this will need to be able to get set on the end of each generation
-        terminated = [0.0]*self.n_agents
+        if self.t_env_steps > self.len_run_steps:
+            terminated = [1.0]*self.n_agents
+        else:
+            terminated = [0.0] * self.n_agents
 
         # Reward:
         # Rewards are going to have to be sent over from the gym trader, which will be able to
@@ -297,15 +302,14 @@ class TrexEnv(MultiAgentEnv):
             shared_list ->  shared list object to be modified
             flag -> boolean that indicates write 0 or 1. True sets 1
         """
-        print(shared_list)
 
-        if flag:
-            shared_list[0] = 1
-            print("Flag was set ")
-            print(shared_list)
-        else:
-            shared_list[0] = 0
-            print("Flag was not set")
+        shared_list[0] = flag
+        # print(shared_list)
+        # if flag:
+        #     print("Flag was set")
+        # else:
+        #     print("Flag was not set")
+
 
     def read_reward_values(self):
         """
@@ -336,6 +340,7 @@ class TrexEnv(MultiAgentEnv):
         then reboot them all and have the gym traders reconnect to the shared memory objects.
         TODO Peter: November 30, 2022; This is going to need to reset the TREX instance
         '''
+        self.t_env_steps = 0
 
         return None
 
