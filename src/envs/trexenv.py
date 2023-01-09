@@ -56,7 +56,7 @@ class TrexEnv(MultiAgentEnv):
         self._seed = 0
 
         ####### TREX GETS LAUNCHED HERE #########
-        self.launch_TREX()
+        # self.launch_TREX()
 
     def setup_spaces(self):
         '''
@@ -238,10 +238,14 @@ class TrexEnv(MultiAgentEnv):
         #actions are provided, so this method needs to put the actions into the right action bufferes
         # actions are tensor (n_actions x n_agent)
         # Trex will have price, quantity,
+        print('In Trexenv Step')
         for i, agent in enumerate(self.mem_lists):
             agent_action = actions[i]
             # insert the agents actions into the memlist
-            self.mem_lists[agent]['actions'] = actions[i]
+            self.mem_lists[agent]['actions'][1] = agent_action.item()
+            self.write_flag(self.mem_lists[agent]['actions'], True)
+        # this is where we would need to set the flag
+
 
         # terminated:
         # this will need to be able to get set on the end of each generation
@@ -253,13 +257,13 @@ class TrexEnv(MultiAgentEnv):
 
         # TODO: get the reward from wherever I put the reward
         self.read_reward_values()
-        reward = []
+        reward = [float(reward) for reward in self._reward]
 
         # info:
         # Imma keep it as a open dictionary for now:
         info = {}
 
-        return float(reward), all(terminated), info
+        return reward, all(terminated), info
 
     def read_obs_values(self):
         """
@@ -274,7 +278,7 @@ class TrexEnv(MultiAgentEnv):
                 flag = True
             # loop through all the agents reward buffers and check their flags
             else:
-                print('Memlist before', self.mem_lists)
+                # print('Memlist before', self.mem_lists)
                 for i, ident in enumerate(self.mem_lists):
                     # FIXME: Value error: too many values to unpack (expected 2)
                     # agent is a dictionary 'obs', 'actions', 'rewards'
@@ -282,8 +286,25 @@ class TrexEnv(MultiAgentEnv):
                         # rewards are good to read
                         # self._obs.append( self.mem_lists[ident]['obs'][1:] ) # this is hardcoded because rewards
                         self._obs.append([self.mem_lists[ident]['obs'][i] for i in range(1,
-                                                                                         len(self.mem_lists[ident]['obs']))] )
+                                                                                         len(self.mem_lists[ident]['obs']))])
                         agent_status[i] = 1
+
+    def write_flag(self, shared_list, flag):
+        """
+        This method sets the flag
+        Parameters:
+            shared_list ->  shared list object to be modified
+            flag -> boolean that indicates write 0 or 1. True sets 1
+        """
+        print(shared_list)
+
+        if flag:
+            shared_list[0] = 1
+            print("Flag was set ")
+            print(shared_list)
+        else:
+            shared_list[0] = 0
+            print("Flag was not set")
 
     def read_reward_values(self):
         """
@@ -299,11 +320,11 @@ class TrexEnv(MultiAgentEnv):
                 flag = True
             #loop through all the agents reward buffers and check their flags
             else:
-                for i, ident in self.mem_lists:
+                for i, ident in enumerate(self.mem_lists):
                     # agent is a dictionary 'obs', 'actions', 'rewards'
                     if self.mem_lists[ident]['rewards'][0]:
                         # rewards are good to read
-                        self._reward[i] = self.mem_lists[ident]['rewards'][1:]# this is hardcoded because rewards
+                        self._reward.append(self.mem_lists[ident]['rewards'][1])
                         agent_status[i] = 1
 
 
