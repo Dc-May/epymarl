@@ -252,10 +252,10 @@ class TrexEnv(MultiAgentEnv):
 
         # terminated:
         # this will need to be able to get set on the end of each generation
-        if self.t_env_steps > self.len_run_steps:
-            terminated = [1.0]*self.n_agents
+        if self.t_env_steps < self.len_run_steps:
+            terminated = [0.0]*self.n_agents
         else:
-            terminated = [0.0] * self.n_agents
+            terminated = [1.0] * self.n_agents
 
         # Reward:
         # Rewards are going to have to be sent over from the gym trader, which will be able to

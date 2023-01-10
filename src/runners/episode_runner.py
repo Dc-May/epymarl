@@ -87,8 +87,6 @@ class EpisodeRunner:
             }
 
             self.batch.update(pre_transition_data, ts=self.t)
-            print(self.t, self.t_env)
-
             # Pass the entire batch of experiences up till now to the agents
             # Receive the actions for each agent at this timestep in a batch of size 1
             actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
@@ -114,6 +112,7 @@ class EpisodeRunner:
             self.batch.update(post_transition_data, ts=self.t)
 
             self.t += 1
+
         state = [self.env.get_state()]
         obs = [self.env.get_obs()]
         last_data = {
@@ -150,6 +149,7 @@ class EpisodeRunner:
         self.t_env += self.t
 
         cur_returns.append(episode_return)
+        # print('Episode return: ', episode_return, 'at', self.t_env) #ToDo: seemsto print too many times?
        
 
         if test_mode and (len(self.test_returns) == self.args.test_nepisode):
