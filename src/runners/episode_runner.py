@@ -5,8 +5,17 @@ import numpy as np
 import math
 from torch import nn
 
-import wandb
+log_wandb = False
+if log_wandb:
+    import wandb
 
+    wandb.init(project="GymRex",
+               entity="dc_may"  # obviously this needs to be changed if ur sbdy else
+               )
+    wandb.config = {
+        "algorithms": "Alg_Name",
+        "scenario": "Price_only_constant_profile",
+    }
 
 
 class EpisodeRunner:
@@ -37,13 +46,7 @@ class EpisodeRunner:
         # Log the first run
         self.log_train_stats_t = -1000000 #Fixme: this is a hack?
 
-        wandb.init(project="GymRex",
-                   entity="dc_may" #obviously this needs to be changed if ur sbdy else
-                   )
-        wandb.config = {
-            "algorithms": "Alg_Name",
-            "scenario": "Price_only_constant_profile",
-        }
+
 
     def setup(self, scheme, groups, preprocess, mac):
         self.new_batch = partial(EpisodeBatch, scheme, groups, self.batch_size, self.episode_limit + 1,
@@ -92,8 +95,9 @@ class EpisodeRunner:
             actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
             reward, terminated, env_info = self.env.step(actions[0])
 
-            for agent_name, agent_reward in zip(self.env.agent_names, reward):
-                wandb.log({agent_name + '_reward': agent_reward})
+            if log_wandb:
+                for agent_name, agent_reward in zip(self.env.agent_names, reward):
+                    wandb.log({agent_name + '_reward': agent_reward})
 
             # TODO: March 14 2022, this appeases the algorithm but still needs to be toggled for the scenario
             # TODO: May 24 2022: this toggle can be done through self.args.name .
@@ -121,9 +125,10 @@ class EpisodeRunner:
             "obs": obs
         }
 
-        for agent_name, agent_obs in zip(self.env.agent_names, obs): #ToDo: DCM 040123 - check if this autoseparates into invididual obs and disentangle and add proper names by fetching names from trex-env
-            for i, value in enumerate(agent_obs):
-                wandb.log({agent_name + '_obs_' + str(i): value})
+        if log_wandb:
+            for agent_name, agent_obs in zip(self.env.agent_names, obs): #ToDo: DCM 040123 - check if this autoseparates into invididual obs and disentangle and add proper names by fetching names from trex-env
+                for i, value in enumerate(agent_obs):
+                    wandb.log({agent_name + '_obs_' + str(i): value})
 
         self.batch.update(last_data, ts=self.t)
 
@@ -144,9 +149,8 @@ class EpisodeRunner:
         cur_stats["n_episodes"] = 1 + cur_stats.get("n_episodes", 0)
         cur_stats["ep_length"] = self.t + cur_stats.get("ep_length", 0)
 
-        #ToDo (Daniel, Peter, Jan9th 2023): check if this change is appropriate
-        # if not test_mode:
-        self.t_env += self.t
+        if not test_mode:
+            self.t_env += self.t
 
         cur_returns.append(episode_return)
         # print('Episode return: ', episode_return, 'at', self.t_env) #ToDo: seemsto print too many times?
@@ -178,10 +182,10 @@ class EpisodeRunner:
 
             # time to log
             self._log_info(log_prefix)
-
-            if hasattr(self.mac.action_selector, "epsilon"):
-                # self.logger.log_stat("epsilon", self.mac.action_selector.epsilon, self.t_env)
-                wandb.log({"epsilon": self.mac.action_selector.epsilon})
+            if log_wandb:
+                if hasattr(self.mac.action_selector, "epsilon"):
+                    # self.logger.log_stat("epsilon", self.mac.action_selector.epsilon, self.t_env)
+                    wandb.log({"epsilon": self.mac.action_selector.epsilon})
             self.log_train_stats_t = self.t_env
 
         return self.batch
@@ -189,14 +193,15 @@ class EpisodeRunner:
     def _log(self, returns, stats, prefix):
         # self.logger.log_stat(prefix + "return_mean", np.mean(returns), self.t_env)
         # self.logger.log_stat(prefix + "return_std", np.std(returns), self.t_env)
-        wandb.log({"return_mean": np.mean(returns),
+        if log_wandb:
+           wandb.log({"return_mean": np.mean(returns),
                      "return_std": np.std(returns)})
         returns.clear()
-
-        for k, v in stats.items():
-            if k != "n_episodes":
-                # self.logger.log_stat(prefix + k + "_mean" , v/stats["n_episodes"], self.t_env)
-                wandb.log({k + "_mean": v/stats["n_episodes"]})
+        if log_wandb:
+            for k, v in stats.items():
+                if k != "n_episodes":
+                    # self.logger.log_stat(prefix + k + "_mean" , v/stats["n_episodes"], self.t_env)
+                    wandb.log({k + "_mean": v/stats["n_episodes"]})
 
         stats.clear()
 
@@ -215,11 +220,12 @@ class EpisodeRunner:
         # self.logger.log_stat(prefix + "agent_1_mean_returns",np.mean(array[:,1]), self.t_env)
         # self.logger.log_stat(prefix + 'agent_1_return_std', np.std(array[:,1]), self.t_env)
         # TODO: sept 17, this needs to be tested
-        for n in range(n_agents):
-            # self.logger.log_stat(prefix + 'agent_' + str(n) + '_mean_returns', np.mean(array[:,n]), self.t_env)
-            # self.logger.log_stat(prefix + 'agent_' + str(n) + '_return_std', np.std(array[:,n]), self.t_env)
-            wandb.log({'agent_' + str(n) + '_mean_returns': np.mean(agent_returns[:,n]),
-                        'agent_' + str(n) + '_return_std': np.std(agent_returns[:,n])})
+        if log_wandb:
+            for n in range(n_agents):
+                # self.logger.log_stat(prefix + 'agent_' + str(n) + '_mean_returns', np.mean(array[:,n]), self.t_env)
+                # self.logger.log_stat(prefix + 'agent_' + str(n) + '_return_std', np.std(array[:,n]), self.t_env)
+                wandb.log({'agent_' + str(n) + '_mean_returns': np.mean(agent_returns[:,n]),
+                            'agent_' + str(n) + '_return_std': np.std(agent_returns[:,n])})
 
         # TODO: works
         self.agent_returns = [] 
@@ -236,9 +242,10 @@ class EpisodeRunner:
 
         #ToDo: this is where DCM will log the histograms for hidden states, needs to be cleaned up
         data = [[w] for w in weights]
-        table = wandb.Table(data=data, columns=["scores"])
-        wandb.log({'my_histogram': wandb.plot.histogram(table, "scores",
-                                                        title="Prediction Score Distribution")})
+        if log_wandb:
+            table = wandb.Table(data=data, columns=["scores"])
+            wandb.log({'my_histogram': wandb.plot.histogram(table, "scores",
+                                                            title="Prediction Score Distribution")})
 
     def _log_weights(self, weights, stats):
         print('In _log_weights')
