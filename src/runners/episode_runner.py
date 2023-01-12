@@ -5,7 +5,7 @@ import numpy as np
 import math
 from torch import nn
 
-log_wandb = False
+log_wandb = True
 if log_wandb:
     import wandb
 
@@ -13,7 +13,7 @@ if log_wandb:
                entity="dc_may"  # obviously this needs to be changed if ur sbdy else
                )
     wandb.config = {
-        "algorithms": "Alg_Name",
+        "algorithm": "DQN_NS",
         "scenario": "Price_only_constant_profile",
     }
 
@@ -32,6 +32,8 @@ class EpisodeRunner:
 
         self.episode_limit = self.env.episode_limit
         self.t = 0
+        self._train_t = 0
+        self._test_t = 0
 
         self.t_env = 0
 
@@ -80,6 +82,9 @@ class EpisodeRunner:
         episode_return = 0
         self.mac.init_hidden(batch_size=self.batch_size)
 
+        log_prefix = "test_" if test_mode else "train_"
+        logging_step = self._test_t if test_mode else self._train_t
+
         while not terminated:
             state = [self.env.get_state()]
             obs = [self.env.get_obs()]
@@ -93,20 +98,22 @@ class EpisodeRunner:
             # Pass the entire batch of experiences up till now to the agents
             # Receive the actions for each agent at this timestep in a batch of size 1
             actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, test_mode=test_mode)
-            reward, terminated, env_info = self.env.step(actions[0])
+            reward, terminated, env_info = self.env.step(actions[0]) #ToDo: Daniel, Jan11th 2023 check if [0] is necessary
 
             if log_wandb:
                 for agent_name, agent_reward in zip(self.env.agent_names, reward):
-                    wandb.log({agent_name + '_reward': agent_reward})
+                    wandb.log({log_prefix + "/" + log_prefix + "_" + agent_name + '_reward': agent_reward},
+                              step=logging_step)
+                    decoded_actions = self.env.decoded_actions
+                for agent_name, agent_action in zip(self.env.agent_names, decoded_actions):
+                    wandb.log({log_prefix + "/" + log_prefix + "_" + '_action': agent_action},
+                              step=logging_step)
 
             # TODO: March 14 2022, this appeases the algorithm but still needs to be toggled for the scenario
             # TODO: May 24 2022: this toggle can be done through self.args.name .
             # Parse the string and then check if coop is in the name
             episode_return += math.fsum(reward)
-            # episode_return += reward
-            # TODO: works 
-            # for i, value in enumerate(env_info['agent_rewards']):
-            #         current_episode_agent_returns[i] += value
+
             post_transition_data = {
                 "actions": actions,
                 "reward": [(reward,)],
@@ -116,6 +123,10 @@ class EpisodeRunner:
             self.batch.update(post_transition_data, ts=self.t)
 
             self.t += 1
+            if test_mode:
+                self._test_t += 1
+            else:
+                self._train_t += 1
 
         state = [self.env.get_state()]
         obs = [self.env.get_obs()]
@@ -128,7 +139,8 @@ class EpisodeRunner:
         if log_wandb:
             for agent_name, agent_obs in zip(self.env.agent_names, obs): #ToDo: DCM 040123 - check if this autoseparates into invididual obs and disentangle and add proper names by fetching names from trex-env
                 for i, value in enumerate(agent_obs):
-                    wandb.log({agent_name + '_obs_' + str(i): value})
+                    wandb.log({log_prefix + "/" + log_prefix + "_" + agent_name + '_obs_' + str(i): value},
+                              step=logging_step)
 
         self.batch.update(last_data, ts=self.t)
 
@@ -138,7 +150,7 @@ class EpisodeRunner:
 
         cur_stats = self.test_stats if test_mode else self.train_stats
         cur_returns = self.test_returns if test_mode else self.train_returns
-        log_prefix = "test_" if test_mode else ""
+
 
         # this is where I can append current_episode_agent_returns
         self.agent_returns.append(current_episode_agent_returns)
@@ -154,13 +166,21 @@ class EpisodeRunner:
 
         cur_returns.append(episode_return)
         # print('Episode return: ', episode_return, 'at', self.t_env) #ToDo: seemsto print too many times?
-       
+
+        # time to log
+        # self._log_info(log_prefix)
+        if log_wandb:
+            if hasattr(self.mac.action_selector, "epsilon"):
+                self.logger.log_stat("epsilon", self.mac.action_selector.epsilon, self.t_env)
+                wandb.log({log_prefix + "/" + log_prefix + "_" + "_epsilon": self.mac.action_selector.epsilon},
+                          step=logging_step)
+
 
         if test_mode and (len(self.test_returns) == self.args.test_nepisode):
-            self._log(cur_returns, cur_stats, log_prefix)
-            self._log_info(log_prefix)
+            self._log(cur_returns, cur_stats, log_prefix, logging_step)
+            # self._log_info(log_prefix)
         elif self.t_env - self.log_train_stats_t >= self.args.runner_log_interval:
-            self._log(cur_returns, cur_stats, log_prefix)
+            self._log(cur_returns, cur_stats, log_prefix, logging_step)
             #TODO: DCM 040123 this is where I will log the histograms:
             # if self.args.use_rnn:
             #     self._log_hidden_states(self.mac.hidden_states, self.t_env)
@@ -180,28 +200,29 @@ class EpisodeRunner:
             #         print(layer.state_dict()['bias_ih'])
 
 
-            # time to log
-            self._log_info(log_prefix)
-            if log_wandb:
-                if hasattr(self.mac.action_selector, "epsilon"):
-                    # self.logger.log_stat("epsilon", self.mac.action_selector.epsilon, self.t_env)
-                    wandb.log({"epsilon": self.mac.action_selector.epsilon})
+
             self.log_train_stats_t = self.t_env
 
         return self.batch
 
-    def _log(self, returns, stats, prefix):
-        # self.logger.log_stat(prefix + "return_mean", np.mean(returns), self.t_env)
-        # self.logger.log_stat(prefix + "return_std", np.std(returns), self.t_env)
+    def _log(self, returns, stats, prefix, logging_step):
+        self.logger.log_stat(prefix + "return_mean", np.mean(returns), self.t_env)
+        self.logger.log_stat(prefix + "return_std", np.std(returns), self.t_env)
+
         if log_wandb:
-           wandb.log({"return_mean": np.mean(returns),
-                     "return_std": np.std(returns)})
+            wandb.log({prefix + "/" + prefix + "_" + "return_mean": np.mean(returns)},
+                      step=logging_step)
+            wandb.log({prefix + "/" + prefix + "_" + "return_std": np.std(returns)},
+                      step=logging_step)
+
         returns.clear()
-        if log_wandb:
-            for k, v in stats.items():
-                if k != "n_episodes":
-                    # self.logger.log_stat(prefix + k + "_mean" , v/stats["n_episodes"], self.t_env)
-                    wandb.log({k + "_mean": v/stats["n_episodes"]})
+
+        for k, v in stats.items():
+            if k != "n_episodes":
+                self.logger.log_stat(prefix + "/" + prefix + "_" + k + "_mean" , v/stats["n_episodes"], self.t_env)
+                if log_wandb:
+                    wandb.log({prefix + "/" + prefix + "_" + k + "_mean": v/stats["n_episodes"]},
+                              step=logging_step)
 
         stats.clear()
 
@@ -220,12 +241,7 @@ class EpisodeRunner:
         # self.logger.log_stat(prefix + "agent_1_mean_returns",np.mean(array[:,1]), self.t_env)
         # self.logger.log_stat(prefix + 'agent_1_return_std', np.std(array[:,1]), self.t_env)
         # TODO: sept 17, this needs to be tested
-        if log_wandb:
-            for n in range(n_agents):
-                # self.logger.log_stat(prefix + 'agent_' + str(n) + '_mean_returns', np.mean(array[:,n]), self.t_env)
-                # self.logger.log_stat(prefix + 'agent_' + str(n) + '_return_std', np.std(array[:,n]), self.t_env)
-                wandb.log({'agent_' + str(n) + '_mean_returns': np.mean(agent_returns[:,n]),
-                            'agent_' + str(n) + '_return_std': np.std(agent_returns[:,n])})
+
 
         # TODO: works
         self.agent_returns = [] 
@@ -241,11 +257,11 @@ class EpisodeRunner:
             self.logger.log_hist(layer, weight, stats)
 
         #ToDo: this is where DCM will log the histograms for hidden states, needs to be cleaned up
-        data = [[w] for w in weights]
-        if log_wandb:
-            table = wandb.Table(data=data, columns=["scores"])
-            wandb.log({'my_histogram': wandb.plot.histogram(table, "scores",
-                                                            title="Prediction Score Distribution")})
+        # data = [[w] for w in weights]
+        # if log_wandb:
+        #     table = wandb.Table(data=data, columns=["scores"])
+        #     wandb.log({'my_histogram': wandb.plot.histogram(table, "scores",
+        #                                                     title="Prediction Score Distribution")})
 
     def _log_weights(self, weights, stats):
         print('In _log_weights')
