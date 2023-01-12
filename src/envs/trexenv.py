@@ -1,6 +1,7 @@
 import sys
 
 import gym
+import torch
 from envs.multiagentenv import MultiAgentEnv
 from gym import error, spaces
 import numpy as np
@@ -16,10 +17,15 @@ class TrexEnv(MultiAgentEnv):
         self.terminated = False
         self.n_agents = 0
         self._obs = []
-        self.action_array = [] # this is the array for the actions in the order that they are processed
         self.obs_array = []
         self.config_name = kwargs['TREX_config']
         TREX_path = kwargs['TREX_path']
+        self.action_space_type = kwargs['action_space_type']
+        if self.action_space_type == 'discrete':
+            if 'action_space_entries' in kwargs:
+                self.action_space_entries = kwargs['action_space_entries']
+            else:
+                raise ValueError('action_space_entries must be specified in the environment yaml for discrete action space')
 
         # changes where python is looking to open the right config
         cur_dir = os.getcwd()
@@ -65,23 +71,43 @@ class TrexEnv(MultiAgentEnv):
         This method sets up the action and observation spaces based on the values that are in the config
         For now, agents are assumed to be homogenous in the
         '''
+        # ToDo:: does this work for multiple learned actions and multiple learners?
 
         for ident in self.config['participants']:
             if self.config['participants'][ident]['trader']['type'] == 'gym_agent':
+
                 try:
                     self.obs_array = self.config['participants'][ident]['trader']['observations']
                     obs_len = len(self.obs_array)
                     obs_space = spaces.Box(low=-np.inf, high=np.inf, shape=(obs_len,))
                 except:
                     print('There was a problem loading the config observations')
+
                 try:
                     actions = self.config['participants'][ident]['trader']['actions']
+
+                    self.action_array = []  # this is the array for the actions in the order that they are processed
+                    min_action = []
+                    max_action = []
                     for action in actions:
                         if actions[action]['heuristic'] == 'learned':
                             self.action_array.append(action)
+                            min_action.append(actions[action]['min'])
+                            max_action.append(actions[action]['max'])
 
                     action_len = len(self.action_array)
-                    action_space = spaces.Box(low=-np.inf, high=np.inf, shape=(action_len,))
+
+                    if self.action_space_type == 'discrete':
+                        action_space = spaces.Discrete(self.action_space_entries)
+                        self.action_list = []
+                        for i in range(action_len):
+                            action_array = np.linspace(min_action, max_action, self.action_space_entries)
+                            self.action_list.append(action_array)
+                    elif self.action_space_type == 'continuous':
+                        action_space = spaces.Box(low=np.array(min_action), high=np.array(max_action), shape=(action_len,))
+                    else:
+                        print('Action space type not recognized:', self.action_space_type)
+                        raise NotImplementedError
                 except:
                     print("there was a problem loading the actions")
 
@@ -242,9 +268,18 @@ class TrexEnv(MultiAgentEnv):
         # actions are tensor (n_actions x n_agent)
         # Trex will have price, quantity,
         # print('In Trexenv Step')
+        self.decoded_actions = []
         for i, agent in enumerate(self.mem_lists):
             agent_action = actions[i]
+            if self.action_space_type == 'discrete':
+                agent_action = agent_action.tolist()
+                if len(self.action_list)== 1:
+                    agent_action = [agent_action]
+
+                agent_action_decoded = [action_list[action] for action_list, action in zip(self.action_list,agent_action)]
+                agent_action = torch.tensor(np.array(agent_action_decoded))
             # insert the agents actions into the memlist
+            self.decoded_actions.append(agent_action.item())
             self.mem_lists[agent]['actions'][1] = agent_action.item()
             self.write_flag(self.mem_lists[agent]['actions'], True)
         # this is where we would need to set the flag
@@ -366,7 +401,15 @@ class TrexEnv(MultiAgentEnv):
 
         """
         # For now, all actions are availiable at all time
-        ACTIONS = [1]*self.action_space[-1].shape[0]
+        agent_action_space = self.action_space[-1]
+        if self.action_space_type == 'continuous':
+            action_space_shape = agent_action_space.shape[0]
+        elif self.action_space_type == 'discrete':
+            action_space_shape = agent_action_space.n
+        else:
+            print('did not recognize action space type', self.action_space_type)
+            raise NotImplementedError
+        ACTIONS = [1]*action_space_shape
         avail_actions = [ACTIONS *self.n_agents]
 
         return avail_actions
