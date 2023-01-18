@@ -85,7 +85,9 @@ class QLearnerCoop:
             target_max_qvals = self.target_mixer(target_max_qvals, batch["state"][:, 1:])
 
         # Calculate 1-step Q-Learning targets
-        targets = rewards.squeeze() + self.args.gamma * (1 - terminated) * target_max_qvals
+        bootstrap = (1 - terminated) * target_max_qvals
+        squezed_rewards = rewards.squeeze(dim=-1)
+        targets = squezed_rewards + self.args.gamma * (1 - terminated) * target_max_qvals
         # targets = []
         # for agent in range(self.mac.n_agents):
         #     targets[agent] = rewards[agent] + self.args.gamma * (1 - terminated) * target_max_qvals[agent]
