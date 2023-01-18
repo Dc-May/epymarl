@@ -150,7 +150,7 @@ class TrexEnv(MultiAgentEnv):
                     'actions': actions_list,
                     'rewards': reward_list
                 }
-                self.agent_names = list(agent_dict.keys())
+        self.agent_names = list(agent_dict.keys())
         return agent_dict
 
     def run_subprocess(self, args: list, delay=0):
@@ -310,25 +310,25 @@ class TrexEnv(MultiAgentEnv):
         """
         This method cycles through the mem lists of the agents until they all have all read the information.
         """
-        agent_status = [0] * self.n_agents
+        agent_status = [False] * self.n_agents
+
         self._obs = []
-        flag = False
-        while not flag:
-            # main loop; keep checking agent_status is
-            if all(agent_status):
-                flag = True
-            # loop through all the agents reward buffers and check their flags
-            else:
-                # print('Memlist before', self.mem_lists)
-                for i, ident in enumerate(self.mem_lists):
-                    # FIXME: Value error: too many values to unpack (expected 2)
-                    # agent is a dictionary 'obs', 'actions', 'rewards'
-                    if self.mem_lists[ident]['obs'][0]:
-                        # rewards are good to read
-                        # self._obs.append( self.mem_lists[ident]['obs'][1:] ) # this is hardcoded because rewards
-                        self._obs.append([self.mem_lists[ident]['obs'][i] for i in range(1,
-                                                                                         len(self.mem_lists[ident]['obs']))])
-                        agent_status[i] = 1
+        while not all(agent_status):
+            try:
+            # print('Memlist before', self.mem_lists)
+                for i, agent_name in enumerate(self.mem_lists):
+                # agent is a dictionary 'obs', 'actions', 'rewards'
+
+                    if self.mem_lists[agent_name]['obs'][0] and not agent_status[i]: #if the flag is set and wwe have not read the values already
+
+                        agent_obs = [self.mem_lists[agent_name]['obs'][j] for j in range(1,len(self.mem_lists[agent_name]['obs']))] #get the values, THIS SEEMS TO WORK WITH SHAREABLE LISTS SO THIS IS WHAT WE DO
+                        self._obs.append(agent_obs)
+                        agent_status[i] = True #set the
+            except:
+                print('failed to access memlist for observations', self.mem_lists)
+
+        # print('self._obs after', self._obs)
+
 
     def write_flag(self, shared_list, flag):
         """
@@ -351,21 +351,18 @@ class TrexEnv(MultiAgentEnv):
         This method cycles through the reward mem lists of the agents until they all have read the information.
         """
         # encode the agents as one hot vectors:
-        agent_status = [0] * self.n_agents
+        agent_status = [False] * self.n_agents
         self._reward = []
-        flag = False
-        while not flag:
-            # main loop; keep checking agent_status is
-            if all(agent_status):
-                flag = True
-            #loop through all the agents reward buffers and check their flags
-            else:
-                for i, ident in enumerate(self.mem_lists):
+        while not all(agent_status):
+            try:
+                for i, agent_name in enumerate(self.mem_lists):
                     # agent is a dictionary 'obs', 'actions', 'rewards'
-                    if self.mem_lists[ident]['rewards'][0]:
+                    if self.mem_lists[agent_name]['rewards'][0]:
                         # rewards are good to read
-                        self._reward.append(self.mem_lists[ident]['rewards'][1])
-                        agent_status[i] = 1
+                        self._reward.append(self.mem_lists[agent_name]['rewards'][1])
+                        agent_status[i] = True
+            except:
+                print('failed to access memlist for rewards', self.mem_lists)
 
 
     def reset(self):
@@ -388,9 +385,7 @@ class TrexEnv(MultiAgentEnv):
         '''
 
         # get all the remote agent values and then put them into a list
-        # TODO: December 02, test this functionality
-        state = []
-        self.read_obs_values()
+        self.read_obs_values()  #ToDo: maybe this can be better somewhere else
         state = np.concatenate(self._obs).tolist()
         return state
 
@@ -409,7 +404,8 @@ class TrexEnv(MultiAgentEnv):
         else:
             print('did not recognize action space type', self.action_space_type)
             raise NotImplementedError
+
         ACTIONS = [1]*action_space_shape
-        avail_actions = [ACTIONS *self.n_agents]
+        avail_actions = [ACTIONS] *self.n_agents
 
         return avail_actions
