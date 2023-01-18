@@ -99,7 +99,7 @@ def run_sequential(args, logger):
     args.state_shape = env_info["state_shape"]
 
     # Default/Base scheme
-    if args.env == "gymcoop" or args.env == 'harvest':
+    if args.env == "gymcoop" or args.env == 'harvest' or args.env == 'TREX':
         scheme = {
             "state": {"vshape": env_info["state_shape"]},
             "obs": {"vshape": env_info["obs_shape"], "group": "agents"},

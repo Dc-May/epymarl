@@ -5,10 +5,10 @@ env_args:
   time_limit: 100
   pretrained_wrapper: null
   n_agents: 0
-  TREX_config: GymIntegration_tests # this is just a default connfig as placeholder, will NOT necessarily be used
+  TREX_config: GymIntegration_tests # this is just a default config as placeholder, will NOT necessarily be used
   TREX_path: D:\TREX-DRL-Project\TREX_Core
   action_space_type: discrete #discrete, continuous
-  action_space_entries: 50 # only used if action_space_type is discrete
+  action_space_entries: 30 # only used if action_space_type is discrete
 
 
 test_greedy: True
@@ -17,4 +17,4 @@ test_interval: 50000
 log_interval: 50000
 runner_log_interval: 10000
 learner_log_interval: 10000
-t_max: 2050000
+t_max: 50000000

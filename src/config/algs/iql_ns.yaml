@@ -4,12 +4,12 @@
 action_selector: "epsilon_greedy"
 epsilon_start: 1.0
 epsilon_finish: 0.05
-epsilon_anneal_time: 50000
+epsilon_anneal_time: 500000
 evaluation_epsilon: 0.0
 
 runner: "episode"
 
-buffer_size: 5000 #5000
+buffer_size: 50000 #5000
 hidden_dim : 32 #64
 
 # update the target network every {} episodes
@@ -23,8 +23,8 @@ obs_individual_obs: False
 mac: "non_shared_mac"
 agent: "rnn_ns" #
 agent_output_type: "q"
-learner: "q_learner"
-standardise_rewards: True
+learner: "q_learner_coop"
+standardise_rewards: False
 double_q: True
 use_rnn: False
 mixer: # Mixer becomes None
