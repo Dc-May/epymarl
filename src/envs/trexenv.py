@@ -1,8 +1,9 @@
 import sys
 
 import gym
+from main_utils import read_flag_x_times
 import torch
-from envs.multiagentenv import MultiAgentEnv
+from epymarl.src.envs.multiagentenv import MultiAgentEnv
 from gym import error, spaces
 import numpy as np
 import TREX_Core._utils.runner
@@ -14,11 +15,20 @@ class TrexEnv(MultiAgentEnv):
 
     """
     def __init__(self, **kwargs):
+        """
+        This method initializes the environment and sets up the action and observation spaces
+        :param kwargs:
+        """
         self.terminated = False
         self.n_agents = 0
         self._obs = []
         self.obs_array = []
+
+
+
         self.config_name = kwargs['TREX_config']
+        self.env_id = kwargs['env_id'] if 'env_id' in kwargs else 0
+        print('initializing TREX env, env_id:', self.env_id, flush=True)
         TREX_path = kwargs['TREX_path']
         self.action_space_type = kwargs['action_space_type']
         if self.action_space_type == 'discrete':
@@ -30,11 +40,12 @@ class TrexEnv(MultiAgentEnv):
         # changes where python is looking to open the right config
         cur_dir = os.getcwd()
         os.chdir(TREX_path)
-        self.runner = TREX_Core._utils.runner.Runner(self.config_name, resume=False, purge=False, path=TREX_path)
+        runner = TREX_Core._utils.runner.Runner(self.config_name, resume=False, purge=False, path=TREX_path)
         os.chdir(cur_dir)
 
-        self.config = self.runner.configs
+        self.config = runner.configs
         self.len_run_steps = self.config['study']['days'] * 24 * 60 * 60 / self.config['study']['time_step_size']
+        self.episode_limit=  self.config['study']['generations']
         self.t_env_steps = 0
 
         # get the n agents from the config:
@@ -61,6 +72,7 @@ class TrexEnv(MultiAgentEnv):
         EPISODE LIMIT IS AN INTEGER -- No weird half timesteps 
         '''
         self.episode_limit = int(86400 * self.config['study']['days'] / self.config['study']['time_step_size'])
+
         self._seed = 0
 
         ####### TREX GETS LAUNCHED HERE #########
@@ -125,27 +137,29 @@ class TrexEnv(MultiAgentEnv):
         """
         from multiprocessing import shared_memory
         agent_dict = {}
-        for ident in self.config['participants']:
-            if self.config['participants'][ident]['trader']['type'] == 'gym_agent':
+        for agent in self.config['participants']:
+            if self.config['participants'][agent]['trader']['type'] == 'gym_agent':
                 # this is where we set up the shared memory object, each agent needs 2 objects actions, observations
                 # todo: November 21 2022; for parallel runner there will need to be extra identifiers for sharelists to remain unique
-                actions_name = ident+'_actions'
-                obs_name = ident+'_obs'
-                reward_name = ident+'_reward'
+                actions_name = agent + str(self.env_id)+'_actions'
+                print('trex-env: ', 'env_id', self.env_id, 'actions_name:', actions_name, flush=True)
+                obs_name = agent + str(self.env_id)+'_obs'
+                print('trex-env: ','env_id', self.env_id, 'obs_name:', obs_name, flush=True)
+                reward_name = agent+str(self.env_id)+'_reward'
+                print('trex-env: ','env_id', self.env_id, 'reward_name:', reward_name, flush=True)
 
                 # Flattened gym spaces. Actions are like this:
                 # [bid price, bid quantity, solar ask price, solar ask quantity, bess ask price, bess ask quantity]
                 length_of_obs = len(self.obs_array) + 1
                 length_of_actions = len(self.action_array) + 1
 
-                observations = [0.0] * length_of_obs
+                # observations = [0.0] * length_of_obs
 
                 actions_list = shared_memory.ShareableList([0.0]*length_of_actions, name=actions_name)
                 obs_list = shared_memory.ShareableList([0.0]*length_of_obs, name=obs_name)
                 reward_list = shared_memory.ShareableList([0.0, 0.0], name=reward_name)
 
-
-                agent_dict[ident] = {
+                agent_dict[agent] = {
                     'obs':  obs_list,
                     'actions': actions_list,
                     'rewards': reward_list
@@ -166,30 +180,6 @@ class TrexEnv(MultiAgentEnv):
         except:
             print('Excepting: using the atpetepymarl python')
             subprocess.run(['C:/Users/molly/.virtualenvs/atpeterpymarl-qnIKOvrx/Scripts/python', args[0], *args[1]])
-
-    def launch_TREX(self):
-        """
-        this method launches trex as a process
-        :return:
-        """
-
-        simulations = [
-            # {'simulation_type': 'baseline'},
-            {'simulation_type': 'training'}
-            # {'simulation_type': 'validation'}
-        ]
-
-        # need to modify the config that is here with the sim type:
-        config = self.runner.modify_config(simulation_type='training')
-
-        launch_list = self.runner.make_launch_list(config)
-        #launch the TREX launchlist from inside EPYMARL
-        from multiprocessing import Pool
-        pool_size = len(launch_list)
-        pool = Pool(pool_size)
-        pool.map(self.run_subprocess, launch_list)
-        pool.close()
-
 
 
     def get_state_size(self):
@@ -281,7 +271,7 @@ class TrexEnv(MultiAgentEnv):
             # insert the agents actions into the memlist
             self.decoded_actions.append(agent_action.item())
             self.mem_lists[agent]['actions'][1] = agent_action.item()
-            self.write_flag(self.mem_lists[agent]['actions'], True)
+            self.mem_lists[agent]['actions'][0] = True
         # this is where we would need to set the flag
         self.t_env_steps += 1
 
@@ -302,7 +292,7 @@ class TrexEnv(MultiAgentEnv):
 
         # info:
         # Imma keep it as a open dictionary for now:
-        info = {}
+        info = {'agent_rewards': reward, 'terminated': terminated}
 
         return reward, all(terminated), info
 
@@ -314,36 +304,19 @@ class TrexEnv(MultiAgentEnv):
 
         self._obs = []
         while not all(agent_status):
-            try:
-            # print('Memlist before', self.mem_lists)
-                for i, agent_name in enumerate(self.mem_lists):
-                # agent is a dictionary 'obs', 'actions', 'rewards'
-
-                    if self.mem_lists[agent_name]['obs'][0] and not agent_status[i]: #if the flag is set and wwe have not read the values already
-
+            #print('Memlist before', self.mem_lists, flush=True)
+            for i, agent_name in enumerate(self.mem_lists):
+            # agent is a dictionary 'obs', 'actions', 'rewards'
+                # if self.mem_lists[agent_name]['obs'][0] and not agent_status[i]: #if the flag is set and wwe have not read the values already
+                if not agent_status[i]:
+                    obs_ready = read_flag_x_times(self.mem_lists[agent_name]['obs'], name='obs')
+                    if obs_ready:
                         agent_obs = [self.mem_lists[agent_name]['obs'][j] for j in range(1,len(self.mem_lists[agent_name]['obs']))] #get the values, THIS SEEMS TO WORK WITH SHAREABLE LISTS SO THIS IS WHAT WE DO
                         self._obs.append(agent_obs)
                         agent_status[i] = True #set the
-            except:
-                print('failed to access memlist for observations', self.mem_lists)
+                        # self.mem_lists[agent_name]['obs'][0] = False #Set flag to false
 
         # print('self._obs after', self._obs)
-
-
-    def write_flag(self, shared_list, flag):
-        """
-        This method sets the flag
-        Parameters:
-            shared_list ->  shared list object to be modified
-            flag -> boolean that indicates write 0 or 1. True sets 1
-        """
-
-        shared_list[0] = flag
-        # print(shared_list)
-        # if flag:
-        #     print("Flag was set")
-        # else:
-        #     print("Flag was not set")
 
 
     def read_reward_values(self):
@@ -354,15 +327,16 @@ class TrexEnv(MultiAgentEnv):
         agent_status = [False] * self.n_agents
         self._reward = []
         while not all(agent_status):
-            try:
-                for i, agent_name in enumerate(self.mem_lists):
-                    # agent is a dictionary 'obs', 'actions', 'rewards'
-                    if self.mem_lists[agent_name]['rewards'][0]:
+            for i, agent_name in enumerate(self.mem_lists):
+                # agent is a dictionary 'obs', 'actions', 'rewards'
+                # if self.mem_lists[agent_name]['rewards'][0] and not agent_status[i]: #if the flag is set and wwe have not read the values already
+                if not agent_status[i]:
+                    reward_ready = read_flag_x_times(self.mem_lists[agent_name]['rewards'], name='rewards')
+                    if reward_ready:
                         # rewards are good to read
                         self._reward.append(self.mem_lists[agent_name]['rewards'][1])
                         agent_status[i] = True
-            except:
-                print('failed to access memlist for rewards', self.mem_lists)
+                        # self.mem_lists[agent_name]['rewards'][0] = False
 
 
     def reset(self):
@@ -373,7 +347,7 @@ class TrexEnv(MultiAgentEnv):
         TODO Peter: November 30, 2022; This is going to need to reset the TREX instance
         '''
         self.t_env_steps = 0
-
+        # print('reset trex_env', self.env_id, flush=True)
         return None
 
     def get_state(self):
@@ -409,3 +383,7 @@ class TrexEnv(MultiAgentEnv):
         avail_actions = [ACTIONS] *self.n_agents
 
         return avail_actions
+
+    def ping(self):
+        print('sucessfully pinged TREX env', self.env_id, flush=True)
+        return self.env_id

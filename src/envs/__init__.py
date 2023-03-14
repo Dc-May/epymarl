@@ -1,10 +1,10 @@
 from functools import partial
-import pretrained
+import epymarl.src.pretrained
 # from smac.env import MultiAgentEnv, StarCraft2Env
 
-from envs.multiagentenv import MultiAgentEnv
+from epymarl.src.envs.multiagentenv import MultiAgentEnv
 import lbforaging
-from envs.trexenv import TrexEnv
+from epymarl.src.envs.trexenv import TrexEnv
 
 
 import sys

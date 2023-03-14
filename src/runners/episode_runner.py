@@ -5,7 +5,7 @@ import numpy as np
 import math
 from torch import nn
 
-log_wandb = True
+log_wandb = False
 if log_wandb:
     import wandb
 
@@ -21,7 +21,7 @@ if log_wandb:
 class EpisodeRunner:
 
     def __init__(self, args, logger):
-
+        print('AAAAAAAAAAAAAAAAAAAA EPisodeRunner __init__')
         self.args = args
         self.logger = logger
         self.batch_size = self.args.batch_size_run

@@ -34,6 +34,8 @@ class PPOLearner:
         # Get the relevant quantities
 
         rewards = batch["reward"][:, :-1]
+        #rewards = rewards.reshape(-1, 1)
+        rewards = rewards.squeeze(-1)
         actions = batch["actions"][:, :]
         terminated = batch["terminated"][:, :-1].float()
         mask = batch["filled"][:, :-1].float()
@@ -124,6 +126,11 @@ class PPOLearner:
 
         target_returns = self.nstep_returns(rewards, mask, target_vals, self.args.q_nstep)
 
+        max_ret = target_returns.max()
+        min_ret = target_returns.min()
+        mean_ret = target_returns.mean()
+        std_ret = target_returns.std()
+        var_ret = target_returns.var()
         running_log = {
             "critic_loss": [],
             "critic_grad_norm": [],
