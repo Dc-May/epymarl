@@ -9,6 +9,11 @@ import numpy as np
 import TREX_Core._utils.runner
 import os
 
+# ToDo: Daniel, March 14 20203:
+# add capability to have agents with multiple actions
+#-----
+# Todo: Daniel, March 14 20203:
+# add capability to have heterogenous agents (obs and actions)
 
 class TrexEnv(MultiAgentEnv):
     """
@@ -18,65 +23,57 @@ class TrexEnv(MultiAgentEnv):
         """
         This method initializes the environment and sets up the action and observation spaces
         :param kwargs:
+        'TREX_config': name of the trex-core experiment
+        'TREX_path': path of the trex env
+        'env-id': if using the parallel runner
+        'action_space_type': discrete or continuous, continuous NOT implemented ATM
+        'seed': random seed, not necessarily fully enforced yet!
         """
-        self.terminated = False
+
+        # changes where python is looking to open the right config
+        assert 'TREX_config' in kwargs, 'TREX_config not in kwargs'
+        config_name = kwargs['TREX_config']
+        assert 'TREX_path' in kwargs, 'TREX_path not in kwargs'
+        TREX_path = kwargs['TREX_path']
+        cur_dir = os.getcwd()
+        os.chdir(TREX_path)
+        runner = TREX_Core._utils.runner.Runner(config_name, resume=False, purge=False, path=TREX_path)
+        self.config = runner.configs
+        del runner
+        os.chdir(cur_dir)
+
+        # get the n agents from the config:
         self.n_agents = 0
+        for agent in self.config['participants']:
+            if self.config['participants'][agent]['trader']['type'] == 'gym_agent':
+                self.n_agents += 1
+        assert self.n_agents > 0, 'There are no gym_agents in the config'
+
+        #set up agent names
+        self.agent_names = [agent for agent in self.config['participants'] if
+                            self.config['participants'][agent]['trader']['type'] == 'gym_agent']
+
+        # set up general env variables
+        self.len_run_steps = self.config['study']['days'] * 24 * 60 * 60 / self.config['study']['time_step_size']
+        self.episode_limit=  int(np.floor(self.config['study']['generations']))
+        self.t_env_steps = 0
+        self._seed = kwargs['seed'] if 'seed' in kwargs else 0
+        self.terminated = False
         self._obs = []
         self.obs_array = []
 
-
-
-        self.config_name = kwargs['TREX_config']
-        self.env_id = kwargs['env_id'] if 'env_id' in kwargs else 0
-        print('initializing TREX env, env_id:', self.env_id, flush=True)
-        TREX_path = kwargs['TREX_path']
+        # set up spaces
         self.action_space_type = kwargs['action_space_type']
         if self.action_space_type == 'discrete':
-            if 'action_space_entries' in kwargs:
-                self.action_space_entries = kwargs['action_space_entries']
-            else:
-                raise ValueError('action_space_entries must be specified in the environment yaml for discrete action space')
+            assert 'action_space_entries' in kwargs, 'action_space_entries must be specified in the environment yaml for discrete action space'
+            self.action_space_entries = kwargs['action_space_entries']
 
-        # changes where python is looking to open the right config
-        cur_dir = os.getcwd()
-        os.chdir(TREX_path)
-        runner = TREX_Core._utils.runner.Runner(self.config_name, resume=False, purge=False, path=TREX_path)
-        os.chdir(cur_dir)
-
-        self.config = runner.configs
-        self.len_run_steps = self.config['study']['days'] * 24 * 60 * 60 / self.config['study']['time_step_size']
-        self.episode_limit=  self.config['study']['generations']
-        self.t_env_steps = 0
-
-        # get the n agents from the config:
-        for ident in self.config['participants']:
-            if self.config['participants'][ident]['trader']['type'] == 'gym_agent':
-                self.n_agents = self.n_agents + 1
-
-        # setup the memory lists
         self.setup_spaces()
+
+        # set up env_id for the memory lists, etc
+        self.env_id = kwargs['env_id'] if 'env_id' in kwargs else 0
+        print('initializing TREX env, env_id:', self.env_id, flush=True)
         self.mem_lists = self.setup_interprocess_memory()
-
-        # #########################################################################
-        # catch if there are no gym traders. This is probably not needed.
-        if not self.n_agents:
-            self.n_agents = 0
-
-        '''
-        TODO: November 19 2022
-        Calculation here is in seconds because steven made it so.
-        Number of seconds in a day: 86400
-        number of days in sim can be pulled from cofig 
-        timestep size in seconds is also in config 
-        episode limit = 86400 * days / time_step_size 
-        EPISODE LIMIT IS AN INTEGER -- No weird half timesteps 
-        '''
-        self.episode_limit = int(86400 * self.config['study']['days'] / self.config['study']['time_step_size'])
-
-        self._seed = 0
-
-        ####### TREX GETS LAUNCHED HERE #########
-        # self.launch_TREX()
 
     def setup_spaces(self):
         '''
@@ -85,18 +82,18 @@ class TrexEnv(MultiAgentEnv):
         '''
         # ToDo:: does this work for multiple learned actions and multiple learners?
 
-        for ident in self.config['participants']:
-            if self.config['participants'][ident]['trader']['type'] == 'gym_agent':
+        for agent in self.config['participants']:
+            if self.config['participants'][agent]['trader']['type'] == 'gym_agent':
 
                 try:
-                    self.obs_array = self.config['participants'][ident]['trader']['observations']
+                    self.obs_array = self.config['participants'][agent]['trader']['observations']
                     obs_len = len(self.obs_array)
                     obs_space = spaces.Box(low=-np.inf, high=np.inf, shape=(obs_len,))
                 except:
                     print('There was a problem loading the config observations')
 
                 try:
-                    actions = self.config['participants'][ident]['trader']['actions']
+                    actions = self.config['participants'][agent]['trader']['actions']
 
                     self.action_array = []  # this is the array for the actions in the order that they are processed
                     min_action = []
@@ -136,7 +133,7 @@ class TrexEnv(MultiAgentEnv):
         Returns: Dictionary {agent_identification_from_config : { obs_list :obs_list_object, action_list :action_list_object
         """
         from multiprocessing import shared_memory
-        agent_dict = {}
+        agents_smls = {}
         for agent in self.config['participants']:
             if self.config['participants'][agent]['trader']['type'] == 'gym_agent':
                 # this is where we set up the shared memory object, each agent needs 2 objects actions, observations
@@ -159,13 +156,13 @@ class TrexEnv(MultiAgentEnv):
                 obs_list = shared_memory.ShareableList([0.0]*length_of_obs, name=obs_name)
                 reward_list = shared_memory.ShareableList([0.0, 0.0], name=reward_name)
 
-                agent_dict[agent] = {
+                agents_smls[agent] = {
                     'obs':  obs_list,
                     'actions': actions_list,
                     'rewards': reward_list
                 }
-        self.agent_names = list(agent_dict.keys())
-        return agent_dict
+
+        return agents_smls
 
     def run_subprocess(self, args: list, delay=0):
         """
