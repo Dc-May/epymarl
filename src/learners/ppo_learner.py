@@ -1,11 +1,12 @@
 import copy
-from components.episode_buffer import EpisodeBatch
-from modules.critics.coma import COMACritic
-from modules.critics.centralV import CentralVCritic
-from utils.rl_utils import build_td_lambda_targets
+from epymarl.src.components.episode_buffer import EpisodeBatch
+from epymarl.src.modules.critics.coma import COMACritic
+from epymarl.src.modules.critics.centralV import CentralVCritic
+from epymarl.src.utils.rl_utils import build_td_lambda_targets as calc_advantage
 import torch as th
 from torch.optim import Adam
 from modules.critics import REGISTRY as critic_resigtry
+
 
 
 class PPOLearner:
@@ -42,7 +43,12 @@ class PPOLearner:
         mask[:, 1:] = mask[:, 1:] * (1 - terminated[:, :-1])
         actions = actions[:, :-1]
         if self.args.standardise_rewards:
-            rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
+            # rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-8)
+            std = th.max(rewards.std(), th.tensor(1e-8))
+            rewards = rewards / std #As per schulman we do not move the mean!
+
+        if self.args.mean_shift_rewards: #if we still want to do that for some reason
+            rewards = rewards - rewards.mean()
 
         # No experiences to train on in this minibatch
         if mask.sum() == 0:
@@ -76,7 +82,7 @@ class PPOLearner:
 
             pi = mac_out
             advantages, critic_train_stats = self.train_critic_sequential(self.critic, self.target_critic, batch, rewards,
-                                                                          critic_mask)
+                                                                          critic_mask, terminated)
             advantages = advantages.detach()
             # Calculate policy grad with mask
 
@@ -90,7 +96,7 @@ class PPOLearner:
             surr2 = th.clamp(ratios, 1 - self.args.eps_clip, 1 + self.args.eps_clip) * advantages
 
             entropy = -th.sum(pi * th.log(pi + 1e-10), dim=-1)
-            pg_loss = -((th.min(surr1, surr2) + self.args.entropy_coef * entropy) * mask).sum() / mask.sum()
+            pg_loss = -((th.min(surr1, surr2) + self.args.entropy_coef * entropy) * mask).mean()
 
             # Optimise agents
             self.agent_optimiser.zero_grad()
@@ -110,21 +116,37 @@ class PPOLearner:
 
         if t_env - self.log_stats_t >= self.args.learner_log_interval:
             ts_logged = len(critic_train_stats["critic_loss"])
-            for key in ["critic_loss", "critic_grad_norm", "td_error_abs", "q_taken_mean", "target_mean"]:
+            for key in critic_train_stats.keys():
                 self.logger.log_stat(key, sum(critic_train_stats[key]) / ts_logged, t_env)
 
+            self.logger.log_stat("kl", (old_log_pi_taken - log_pi_taken).mean().item(), t_env)
+            self.logger.log_stat("entropy", entropy.mean().item(), t_env)
             self.logger.log_stat("advantage_mean", (advantages * mask).sum().item() / mask.sum().item(), t_env)
             self.logger.log_stat("pg_loss", pg_loss.item(), t_env)
             self.logger.log_stat("agent_grad_norm", grad_norm, t_env)
             self.logger.log_stat("pi_max", (pi.max(dim=-1)[0] * mask).sum().item() / mask.sum().item(), t_env)
             self.log_stats_t = t_env
 
-    def train_critic_sequential(self, critic, target_critic, batch, rewards, mask):
+    def train_critic_sequential(self, critic, target_critic, batch, rewards, mask, terminated):
         # Optimise critic
-        target_vals = target_critic(batch)[:, :-1]
-        target_vals = target_vals.squeeze(3)
 
-        target_returns = self.nstep_returns(rewards, mask, target_vals, self.args.q_nstep)
+
+        if self.args.use_td_lambda_return:
+            target_vals = target_critic(batch)
+            target_vals = target_vals.squeeze(3)
+            assert hasattr(self.args, "td_lambda"), "td_lambda not set"
+            assert hasattr(self.args, "gamma"), "gamma not set"
+            assert hasattr(self.args, "bootstrap_prediction"), "bootstrap_predictions boolean not set"
+            target_returns = calc_advantage(rewards,terminated, mask, target_vals, self.args.n_agents, self.args.gamma, self.args.td_lambda, self.args.bootstrap_prediction)
+            # target_returns = target_returns[:,:-1]
+        elif self.args.use_n_step_return:
+            target_vals = target_critic(batch)[:, :-1]
+            target_vals = target_vals.squeeze(3)
+            target_returns = self.nstep_returns(rewards, mask, target_vals, self.args.q_nstep)
+        else:
+            target_vals = target_critic(batch)[:, :-1]
+            target_vals = target_vals.squeeze(3)
+            target_returns = self.nstep_returns(rewards, mask, target_vals, 1)
 
         max_ret = target_returns.max()
         min_ret = target_returns.min()
@@ -137,19 +159,28 @@ class PPOLearner:
             "td_error_abs": [],
             "target_mean": [],
             "q_taken_mean": [],
+            "explained_variance": [],
         }
 
         v = critic(batch)[:, :-1].squeeze(3)
-        td_error = (target_returns.detach() - v)
-        masked_td_error = td_error * mask
-        loss = (masked_td_error ** 2).sum() / mask.sum()
+        masked_td_error = (target_returns.detach() - v) * mask
+
+        if self.args.loss_type == "MSE":
+            critic_loss = (masked_td_error ** 2).mean()
+        elif self.args.loss_type == "Huber":
+            critic_loss = th.nn.functional.huber_loss(v, target_returns.detach(), reduction="none")
+            critic_loss = (critic_loss * mask).mean()
 
         self.critic_optimiser.zero_grad()
-        loss.backward()
+        critic_loss.backward()
         grad_norm = th.nn.utils.clip_grad_norm_(self.critic_params, self.args.grad_norm_clip)
         self.critic_optimiser.step()
 
-        running_log["critic_loss"].append(loss.item())
+        explained_variance = 1 - (masked_td_error.var()*mask / target_returns.var()*mask)
+        explained_variance = explained_variance.mean()
+
+        running_log["explained_variance"].append(explained_variance.item())
+        running_log["critic_loss"].append(critic_loss.item())
         running_log["critic_grad_norm"].append(grad_norm)
         mask_elems = mask.sum().item()
         running_log["td_error_abs"].append((masked_td_error.abs().sum().item() / mask_elems))

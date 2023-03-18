@@ -5,33 +5,46 @@ mask_before_softmax: True
 
 runner: "parallel"
 
-buffer_size: 10
-batch_size_run: 10
-batch_size: 10
+buffer_size: 15
+batch_size_run: 3
+batch_size: 8
 
 env_args:
   state_last_action: False # critic adds last action internally
 
 # update the target network every {} training steps
-target_update_interval_or_tau: 200
+target_update_interval_or_tau: 0.005
 
 
 lr: 0.0005
 
-obs_agent_id: True
+obs_agent_id: False
 obs_last_action: False
 obs_individual_obs: False
 
 # use IA2C
+mac: "non_shared_mac"
 agent_output_type: "pi_logits"
 learner: "ppo_learner"
-entropy_coef: 0.01
+actor_loss_accumulation: 'mean'
+grad_norm_clip: 10
+
+
 standardise_rewards: True
-use_rnn: False
-q_nstep: 5 # 1 corresponds to normal r + gammaV
+mean_shift_rewards: True
+
+loss_type: 'Huber'
+use_td_lambda_return: True
+td_lambda: 0.95
+bootstrap_prediction: True
+# q_nstep: 10 # 1 corresponds to normal r + gammaV
 critic_type: "ac_critic"
-epochs: 4
+use_rnn: False
+epochs: 10
+
 eps_clip: 0.2
+entropy_coef: 0.005
+hidden_dim: 96
 name: "ippo"
 
 t_max: 20050000
