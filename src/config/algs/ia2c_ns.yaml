@@ -5,9 +5,9 @@ mask_before_softmax: True
 
 runner: "parallel"
 
-buffer_size: 10
-batch_size_run: 10
-batch_size: 10
+buffer_size: 5
+batch_size_run: 5
+batch_size: 5
 
 env_args:
   state_last_action: False # critic adds last action internally
@@ -31,5 +31,6 @@ use_rnn: False
 q_nstep: 5 # 1 corresponds to normal r + gammaV
 critic_type: "ac_critic_ns"
 name: "ia2c_ns"
+hidden_dim: 16
 
 t_max: 20050000

@@ -24,6 +24,8 @@ class ParallelRunner:
         pool = mp.Pool(processes=pool_size)
 
         # Create the environment arguments with unique env_id
+        # self.args.env['use_tensorboard'] = self.args.use_tensorboard
+        #self.args.env['unique_token'] = self.args.use_tensorboard #ToDO: find a betetr place for this line
         env_fn = env_REGISTRY[self.args.env]
         env_args = [self.args.env_args.copy() for _ in range(self.batch_size)]
         for i in range(self.batch_size):
@@ -175,7 +177,6 @@ class ParallelRunner:
         final_env_infos = []  # may store extra stats like battle won. this is filled in ORDER OF TERMINATION
 
         while True:
-
             # Pass the entire batch of experiences up till now to the agents
             # Receive the actions for each agent at this timestep in a batch for each un-terminated env
             actions = self.mac.select_actions(self.batch, t_ep=self.t, t_env=self.t_env, bs=envs_not_terminated, test_mode=test_mode)
@@ -344,6 +345,15 @@ class ParallelRunner:
 
         for k, v in stats.items():
             if k != "n_episodes":
+                shape = v.shape if hasattr(v, "shape") else None
+                if shape is not None:
+                    if len(shape) == 0:
+                        v = np.mean(v)
+                    elif len(shape) >=1:
+                        v = np.mean(v, axis=-1)
+                    else:
+                        raise ValueError("Unknown shape: {}".format(shape))
+
                 self.logger.log_stat(prefix + k + "_mean" , v/stats["n_episodes"], self.t_env)
         stats.clear()
     
